@@ -213,6 +213,17 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
     ) {
         let taskId = downloadTask.taskIdentifier
         let describedGUID = DownloadManager.normalizedGUID(downloadTask.taskDescription)
+        let statusCode = (downloadTask.response as? HTTPURLResponse)?.statusCode
+        guard let statusCode, (200...299).contains(statusCode) else {
+            logger.error("Not saving download, HTTP status \(statusCode.map(String.init) ?? "missing")")
+            let guidForCleanup = describedGUID
+            Task { @MainActor in
+                let guid = guidForCleanup ?? self.manager?.taskToGUID[taskId]
+                guard let guid else { return }
+                self.finishTracking(guid: guid, taskId: taskId, saved: false)
+            }
+            return
+        }
         let fm = FileManager.default
 
         // The system deletes `location` when this method returns. If we know the

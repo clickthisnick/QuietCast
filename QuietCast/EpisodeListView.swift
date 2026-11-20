@@ -156,9 +156,22 @@ struct EpisodeListView: View {
 
             let (data, response) = try await URLSession.shared.data(for: request)
 
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                if episodes.isEmpty {
+                    let code = (response as? HTTPURLResponse)?.statusCode
+                    if let code {
+                        errorMessage = "The feed server returned an error (\(code)). Pull to refresh to try again."
+                    } else {
+                        errorMessage = "The feed server returned an unexpected response. Pull to refresh to try again."
+                    }
+                }
+                isLoading = false
+                return
+            }
+
             // Check if the server returned HTML instead of XML/RSS
-            if let httpResponse = response as? HTTPURLResponse,
-               let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type"),
+            if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type"),
                contentType.contains("text/html") {
                 if episodes.isEmpty {
                     errorMessage = "This URL returned a webpage, not an RSS feed."

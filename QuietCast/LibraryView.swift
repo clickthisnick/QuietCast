@@ -344,7 +344,12 @@ struct LibraryView: View {
                 request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
                 request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
                 request.timeoutInterval = 15
-                let (data, _) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    addURLError = "Could not load feed. The server returned an error."
+                    showAddURL = true
+                    return
+                }
                 let parser = RSSParser(feedURL: trimmed)
                 let episodes = parser.parse(data: data)
 
