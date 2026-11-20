@@ -176,6 +176,26 @@ final class PersistenceManager {
         fileManager.fileExists(atPath: localFileURL(for: episode).path)
     }
 
+    /// Keep downloaded audio out of iCloud backup. The files are large and can be fetched again.
+    func excludeFromBackup(url: URL) {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutable = url
+        do {
+            try mutable.setResourceValues(values)
+        } catch {
+            logger.error("Failed to exclude \(url.lastPathComponent) from backup: \(error.localizedDescription)")
+        }
+    }
+
+    func excludeExistingDownloadsFromBackup() {
+        let docs = documentsDirectory()
+        guard let files = try? fileManager.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix("download_") {
+            excludeFromBackup(url: file)
+        }
+    }
+
     func savePlaybackPosition(_ seconds: Double, for guid: String) {
         var library = loadLibrary()
         library.playbackPositions[guid] = seconds

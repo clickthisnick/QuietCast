@@ -41,6 +41,7 @@ final class DownloadManager {
     private init() {
         let library = PersistenceManager.shared.loadLibrary()
         downloadedGUIDs = library.downloadedEpisodeGUIDs
+        PersistenceManager.shared.excludeExistingDownloadsFromBackup()
         Self.sweepIncomingDirectory()
 
         backgroundEventsCompletionHandler = Self.pendingBackgroundCompletion
@@ -335,6 +336,8 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
         guard let manager else { return }
         manager.activeDownloads.removeValue(forKey: guid)
         if saved {
+            let destURL = PersistenceManager.shared.localFileURL(forEpisodeGUID: guid)
+            PersistenceManager.shared.excludeFromBackup(url: destURL)
             manager.downloadedGUIDs.insert(guid)
             manager.saveDownloadState()
             PersistenceManager.shared.flushToDisk()

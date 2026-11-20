@@ -23,6 +23,15 @@ struct NowPlayingBar: View {
                 .padding(.horizontal)
                 .padding(.top, 6)
 
+            if let playbackError = audioPlayer.playbackError {
+                Text(playbackError)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+            }
+
             // Scrubber
             scrubber
 
