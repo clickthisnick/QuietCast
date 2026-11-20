@@ -1,8 +1,10 @@
 import AVFoundation
 import MediaPlayer
+import Observation
 import os
 
 /// Manages system volume enforcement: cap, floor, KVO observation, hidden MPVolumeView.
+@Observable
 @MainActor
 final class VolumeEnforcer {
     static let shared = VolumeEnforcer()
