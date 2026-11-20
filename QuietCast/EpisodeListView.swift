@@ -9,7 +9,6 @@ struct EpisodeListView: View {
     @State private var errorMessage: String?
     @State private var isRefreshing = false
     @State private var skipIntroSeconds: Int?
-    private let skipIntroOptions = [0, 10, 15, 30, 45, 60, 90, 120]
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -52,7 +51,7 @@ struct EpisodeListView: View {
                                 }
                             }
                         }
-                        ForEach(skipIntroOptions, id: \.self) { seconds in
+                        ForEach(AppSettings.skipIntroOptions, id: \.self) { seconds in
                             Button {
                                 skipIntroSeconds = seconds
                                 PersistenceManager.shared.setSkipSeconds(seconds, for: podcast.feedURL)
@@ -115,19 +114,7 @@ struct EpisodeListView: View {
     private func playRandomOldEpisode() {
         // Stop any text-to-speech before starting audio
         SpeechAnnouncer.shared.stop()
-
-        let ageDays = AppSettings.randomEpisodeAgeDays
-        let cutoff = Calendar.current.date(byAdding: .day, value: -ageDays, to: Date()) ?? Date()
-        let cutoffTimestamp = cutoff.timeIntervalSince1970
-
-        let eligible = episodes.filter { episode in
-            guard let timestamp = episode.pubDateTimestamp else {
-                // If we can't parse the date, include it (likely an old episode with unusual format)
-                return true
-            }
-            return timestamp < cutoffTimestamp
-        }
-
+        let eligible = episodes.olderThan(days: AppSettings.randomEpisodeAgeDays)
         if let random = eligible.randomElement() {
             audioPlayer.play(episode: random)
         }
@@ -257,7 +244,7 @@ struct EpisodeRow: View {
                     Text("New")
                         .foregroundStyle(Color.warmAccent)
                 case .inProgress(let secs):
-                    Text("\(formatResumeTime(secs)) in")
+                    Text("\(AppSettings.hoursMinutes(secs)) in")
                         .foregroundStyle(Color.warmAccent)
                 case .played:
                     Text("Played")
@@ -397,25 +384,10 @@ struct EpisodeRow: View {
         }
 
         // Pause playback so the announcement is audible.
-        let wasPlaying = audioPlayer.isPlaying
-        if wasPlaying {
-            audioPlayer.pausePlayback()
-        }
-
-        announcer.speak(text, identifier: episode.guid) {
+        audioPlayer.pauseThenSpeak(text, identifier: episode.guid) { wasPlaying in
             if wasPlaying {
                 self.audioPlayer.resumePlayback()
             }
         }
-    }
-
-    private func formatResumeTime(_ seconds: Double) -> String {
-        let total = max(Int(seconds), 0)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m)m"
     }
 }

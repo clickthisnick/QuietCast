@@ -125,11 +125,11 @@ struct NowPlayingBar: View {
                 }
             }
 
-            // Skip back 30s
+            // Skip back
             Button {
                 audioPlayer.skipBackward()
             } label: {
-                Image(systemName: "gobackward.30")
+                Image(systemName: "gobackward.\(AppSettings.skipIntervalSeconds)")
                     .font(.title2)
                     .frame(minWidth: 44, minHeight: 44)
             }
@@ -153,11 +153,11 @@ struct NowPlayingBar: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
 
-            // Skip forward 30s
+            // Skip forward
             Button {
                 audioPlayer.skipForward()
             } label: {
-                Image(systemName: "goforward.30")
+                Image(systemName: "goforward.\(AppSettings.skipIntervalSeconds)")
                     .font(.title2)
                     .frame(minWidth: 44, minHeight: 44)
             }
@@ -218,12 +218,7 @@ struct NowPlayingBar: View {
         }
 
         // Remember whether the podcast was playing, so we only resume if it was
-        let wasPlaying = audioPlayer.isPlaying
-        if wasPlaying {
-            audioPlayer.pausePlayback()
-        }
-
-        SpeechAnnouncer.shared.speak("Sleep timer: \(formatRemainingForSpeech(remaining)).") {
+        audioPlayer.pauseThenSpeak("Sleep timer: \(formatRemainingForSpeech(remaining)).") { wasPlaying in
             if wasPlaying {
                 audioPlayer.resumePlaybackWithoutResettingTimer()
             }

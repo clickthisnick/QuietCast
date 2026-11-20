@@ -10,7 +10,6 @@ struct SettingsView: View {
     @State private var volumeRangeAutoReenableMinutes: Int = AppSettings.volumeRangeAutoReenableMinutes
     @State private var podcasts: [Podcast] = []
     @State private var excludedFeedURLs: Set<String> = Set(AppSettings.randomExcludedFeedURLs)
-    private let skipIntroOptions = [0, 10, 15, 30, 45, 60, 90, 120]
     private let reenableOptions = [0, 30, 60, 120, 180]
 
     var body: some View {
@@ -33,63 +32,26 @@ struct SettingsView: View {
                     .tint(Color.warmAccent)
                     .padding(.vertical, 4)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Volume Limit")
-                                .font(.subheadline)
-                            Spacer()
-                            TappablePercentage(
-                                value: Binding(
-                                    get: { audioPlayer.maxVolume },
-                                    set: { audioPlayer.setMaxVolume($0) }
-                                ),
-                                range: 0.1...1.0,
-                                onCommit: { audioPlayer.setMaxVolume($0) }
-                            )
-                        }
-                        Slider(
-                            value: Binding(
-                                get: { Double(audioPlayer.maxVolume) },
-                                set: { audioPlayer.setMaxVolume(Float($0)) }
-                            ),
-                            in: 0.1...1.0,
-                            step: 0.05
-                        )
-                        .tint(Color.warmAccent)
-                        Text("Caps in-app volume. Useful for sleep — keeps audio quiet even if your phone volume is high.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
+                    VolumeLimitRow(
+                        title: "Volume Limit",
+                        value: audioPlayer.maxVolume,
+                        range: 0.1...1.0,
+                        step: 0.05,
+                        caption: "Caps in-app volume. Useful for sleep — keeps audio quiet even if your phone volume is high.",
+                        set: { audioPlayer.setMaxVolume($0) }
+                    )
                     .padding(.vertical, 4)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Skip Intro")
-                                .font(.subheadline)
-                            Spacer()
-                            Menu {
-                                ForEach(skipIntroOptions, id: \.self) { seconds in
-                                    Button {
-                                        defaultSkipIntroSeconds = seconds
-                                        AppSettings.defaultSkipIntroSeconds = seconds
-                                    } label: {
-                                        HStack {
-                                            Text(seconds == 0 ? "Off" : "\(seconds) seconds")
-                                            if defaultSkipIntroSeconds == seconds {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Text(defaultSkipIntroSeconds == 0 ? "Off" : "\(defaultSkipIntroSeconds)s")
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.warmAccent)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Color.warmAccent.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
+                        OptionMenuRow(
+                            title: "Skip Intro",
+                            options: AppSettings.skipIntroOptions,
+                            selection: defaultSkipIntroSeconds,
+                            menuLabel: { $0 == 0 ? "Off" : "\($0) seconds" },
+                            capsuleLabel: { $0 == 0 ? "Off" : "\($0)s" }
+                        ) { seconds in
+                            defaultSkipIntroSeconds = seconds
+                            AppSettings.defaultSkipIntroSeconds = seconds
                         }
                         Text("Automatically skip the first seconds of each episode. Override per podcast from the episode list toolbar.")
                             .font(.caption2)
@@ -109,7 +71,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Lock Volume Range")
                                 .font(.subheadline)
-                            Text("Keeps system volume within a set range during nighttime hours (8 PM – 8 AM).")
+                            Text("Keeps system volume within a set range during nighttime hours (\(TimeGate.nightHoursText)).")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -118,39 +80,20 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Auto Re-Enable")
-                                .font(.subheadline)
-                            Spacer()
-                            Menu {
-                                ForEach(reenableOptions, id: \.self) { minutes in
-                                    Button {
-                                        volumeRangeAutoReenableMinutes = minutes
-                                        audioPlayer.setVolumeRangeAutoReenableMinutes(minutes)
-                                    } label: {
-                                        HStack {
-                                            Text(reenableLabel(for: minutes))
-                                            if volumeRangeAutoReenableMinutes == minutes {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            } label: {
-                                Text(reenableLabel(for: volumeRangeAutoReenableMinutes))
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.warmAccent)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Color.warmAccent.opacity(0.15))
-                                    .clipShape(Capsule())
-                            }
+                        OptionMenuRow(
+                            title: "Auto Re-Enable",
+                            options: reenableOptions,
+                            selection: volumeRangeAutoReenableMinutes,
+                            menuLabel: minutesChoiceLabel
+                        ) { minutes in
+                            volumeRangeAutoReenableMinutes = minutes
+                            audioPlayer.setVolumeRangeAutoReenableMinutes(minutes)
                         }
 
                         if !audioPlayer.systemVolumeCapEnabled, let reenableAt = audioPlayer.volumeRangeReenableAt {
                             TimelineView(.periodic(from: .now, by: 1)) { context in
                                 let remaining = reenableAt.timeIntervalSince(context.date)
-                                Text(remaining > 0 ? "Lock will re-enable in \(formatDuration(remaining))" : "Lock will re-enable now")
+                                Text(remaining > 0 ? "Lock will re-enable in \(AppSettings.hoursMinutes(remaining.rounded()))" : "Lock will re-enable now")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
@@ -185,50 +128,16 @@ struct SettingsView: View {
                             Label("Noise Cancellation On", systemImage: "ear.fill")
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(Color.warmAccent)
-                            HStack {
-                                Text("Max Volume")
-                                    .font(.subheadline)
-                                Spacer()
-                                TappablePercentage(
-                                    value: Binding(
-                                        get: { audioPlayer.systemVolumeCapNC },
-                                        set: { audioPlayer.setSystemVolumeCapNC($0) }
-                                    ),
-                                    range: 0.0...1.0,
-                                    onCommit: { audioPlayer.setSystemVolumeCapNC($0) }
-                                )
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(audioPlayer.systemVolumeCapNC) },
-                                    set: { audioPlayer.setSystemVolumeCapNC(Float($0)) }
-                                ),
-                                in: 0.0...1.0,
-                                step: 0.01
+                            VolumeLimitRow(
+                                title: "Max Volume",
+                                value: audioPlayer.systemVolumeCapNC,
+                                set: { audioPlayer.setSystemVolumeCapNC($0) }
                             )
-                            .tint(Color.warmAccent)
-                            HStack {
-                                Text("Min Volume")
-                                    .font(.subheadline)
-                                Spacer()
-                                TappablePercentage(
-                                    value: Binding(
-                                        get: { audioPlayer.systemVolumeFloorNC },
-                                        set: { audioPlayer.setSystemVolumeFloorNC($0) }
-                                    ),
-                                    range: 0.0...1.0,
-                                    onCommit: { audioPlayer.setSystemVolumeFloorNC($0) }
-                                )
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(audioPlayer.systemVolumeFloorNC) },
-                                    set: { audioPlayer.setSystemVolumeFloorNC(Float($0)) }
-                                ),
-                                in: 0.0...1.0,
-                                step: 0.01
+                            VolumeLimitRow(
+                                title: "Min Volume",
+                                value: audioPlayer.systemVolumeFloorNC,
+                                set: { audioPlayer.setSystemVolumeFloorNC($0) }
                             )
-                            .tint(Color.warmAccent)
                         }
                         .padding(.vertical, 4)
 
@@ -237,51 +146,17 @@ struct SettingsView: View {
                             Label("Noise Cancellation Off", systemImage: "ear")
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.secondary)
-                            HStack {
-                                Text("Max Volume")
-                                    .font(.subheadline)
-                                Spacer()
-                                TappablePercentage(
-                                    value: Binding(
-                                        get: { audioPlayer.systemVolumeCapNoNC },
-                                        set: { audioPlayer.setSystemVolumeCapNoNC($0) }
-                                    ),
-                                    range: 0.0...1.0,
-                                    onCommit: { audioPlayer.setSystemVolumeCapNoNC($0) }
-                                )
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(audioPlayer.systemVolumeCapNoNC) },
-                                    set: { audioPlayer.setSystemVolumeCapNoNC(Float($0)) }
-                                ),
-                                in: 0.0...1.0,
-                                step: 0.01
+                            VolumeLimitRow(
+                                title: "Max Volume",
+                                value: audioPlayer.systemVolumeCapNoNC,
+                                set: { audioPlayer.setSystemVolumeCapNoNC($0) }
                             )
-                            .tint(Color.warmAccent)
-                            HStack {
-                                Text("Min Volume")
-                                    .font(.subheadline)
-                                Spacer()
-                                TappablePercentage(
-                                    value: Binding(
-                                        get: { audioPlayer.systemVolumeFloorNoNC },
-                                        set: { audioPlayer.setSystemVolumeFloorNoNC($0) }
-                                    ),
-                                    range: 0.0...1.0,
-                                    onCommit: { audioPlayer.setSystemVolumeFloorNoNC($0) }
-                                )
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(audioPlayer.systemVolumeFloorNoNC) },
-                                    set: { audioPlayer.setSystemVolumeFloorNoNC(Float($0)) }
-                                ),
-                                in: 0.0...1.0,
-                                step: 0.01
+                            VolumeLimitRow(
+                                title: "Min Volume",
+                                value: audioPlayer.systemVolumeFloorNoNC,
+                                set: { audioPlayer.setSystemVolumeFloorNoNC($0) }
                             )
-                            .tint(Color.warmAccent)
-                            Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced 8 PM – 8 AM, or always if enabled above.")
+                            Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced \(TimeGate.nightHoursText), or always if enabled above.")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -374,7 +249,7 @@ struct SettingsView: View {
                         infoItem(
                             icon: "clock",
                             title: "Search Hours",
-                            detail: "Podcast search is available 8 AM – 8 PM. You can always listen to saved podcasts and add feeds by URL."
+                            detail: "Podcast search is available \(TimeGate.searchHoursText). You can always listen to saved podcasts and add feeds by URL."
                         )
                         infoItem(
                             icon: "moon.zzz",
@@ -478,27 +353,6 @@ struct SettingsView: View {
         }
     }
 
-    private func reenableLabel(for minutes: Int) -> String {
-        switch minutes {
-        case 0: return "Off"
-        case 30: return "30 minutes"
-        case 60: return "1 hour"
-        case 120: return "2 hours"
-        case 180: return "3 hours"
-        default: return "\(minutes) min"
-        }
-    }
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m)m"
-    }
-
     private func togglePodcast(_ feedURL: String) {
         if excludedFeedURLs.contains(feedURL) {
             excludedFeedURLs.remove(feedURL)
@@ -530,33 +384,14 @@ private struct AutoPauseRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Auto-Pause")
-                    .font(.subheadline)
-                Spacer()
-                Menu {
-                    ForEach(options, id: \.self) { minutes in
-                        Button {
-                            autoPauseMinutes = minutes
-                            AppSettings.autoPauseMinutes = minutes
-                        } label: {
-                            HStack {
-                                Text(label(for: minutes))
-                                if autoPauseMinutes == minutes {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Text(label(for: autoPauseMinutes))
-                        .font(.subheadline)
-                        .foregroundStyle(Color.warmAccent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.warmAccent.opacity(0.15))
-                        .clipShape(Capsule())
-                }
+            OptionMenuRow(
+                title: "Auto-Pause",
+                options: options,
+                selection: autoPauseMinutes,
+                menuLabel: minutesChoiceLabel
+            ) { minutes in
+                autoPauseMinutes = minutes
+                AppSettings.autoPauseMinutes = minutes
             }
             Text("Automatically pauses after the selected duration, even as episodes auto-play overnight. The countdown isn’t reset by new episodes. Unpausing after it fires starts a fresh timer.")
                 .font(.caption2)
@@ -564,18 +399,95 @@ private struct AutoPauseRow: View {
         }
         .padding(.vertical, 4)
     }
+}
 
-    private func label(for minutes: Int) -> String {
-        switch minutes {
-        case 0: return "Off"
-        case 15: return "15 minutes"
-        case 30: return "30 minutes"
-        case 45: return "45 minutes"
-        case 60: return "1 hour"
-        case 90: return "90 minutes"
-        case 120: return "2 hours"
-        case 180: return "3 hours"
-        default: return "\(minutes) min"
+/// Shared labels for minute menus (auto-pause and lock re-enable).
+private func minutesChoiceLabel(_ minutes: Int) -> String {
+    switch minutes {
+    case 0: return "Off"
+    case 60: return "1 hour"
+    case 120: return "2 hours"
+    case 180: return "3 hours"
+    case 15, 30, 45, 90: return "\(minutes) minutes"
+    default: return "\(minutes) min"
+    }
+}
+
+/// Label, tappable percent pill, and slider. Caption is optional.
+private struct VolumeLimitRow: View {
+    let title: String
+    let value: Float
+    var range: ClosedRange<Float> = 0.0...1.0
+    var step: Float = 0.01
+    var caption: String? = nil
+    let set: (Float) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                Spacer()
+                TappablePercentage(
+                    value: Binding(get: { value }, set: set),
+                    range: range,
+                    onCommit: set
+                )
+            }
+            Slider(
+                value: Binding(
+                    get: { Double(value) },
+                    set: { set(Float($0)) }
+                ),
+                in: Double(range.lowerBound)...Double(range.upperBound),
+                step: Double(step)
+            )
+            .tint(Color.warmAccent)
+            if let caption {
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+/// Capsule menu used by Skip Intro, Auto Re-Enable, and Auto-Pause.
+private struct OptionMenuRow<Option: Hashable>: View {
+    let title: String
+    let options: [Option]
+    let selection: Option
+    let menuLabel: (Option) -> String
+    var capsuleLabel: ((Option) -> String)? = nil
+    let onSelect: (Option) -> Void
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+            Spacer()
+            Menu {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        onSelect(option)
+                    } label: {
+                        HStack {
+                            Text(menuLabel(option))
+                            if selection == option {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Text((capsuleLabel ?? menuLabel)(selection))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.warmAccent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.warmAccent.opacity(0.15))
+                    .clipShape(Capsule())
+            }
         }
     }
 }

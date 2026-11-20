@@ -116,9 +116,23 @@ final class PersistenceManager {
         }
     }
 
-    func saveLibrary(_ library: LibraryData) {
+    private func saveLibrary(_ library: LibraryData) {
         cachedLibrary = library
         scheduleSave()
+    }
+
+    /// Load the in-memory library, change it, and save.
+    /// Position updates pass `flushImmediately` so one write hits disk now.
+    /// Other edits stay on the short debounced save.
+    func update(flushImmediately: Bool = false, _ mutate: (inout LibraryData) -> Void) {
+        var library = loadLibrary()
+        mutate(&library)
+        if flushImmediately {
+            cachedLibrary = library
+            flushToDisk()
+        } else {
+            saveLibrary(library)
+        }
     }
 
     /// Debounced disk write — coalesces rapid saves (e.g. position updates) into one write
@@ -197,10 +211,20 @@ final class PersistenceManager {
     }
 
     func savePlaybackPosition(_ seconds: Double, for guid: String) {
-        var library = loadLibrary()
-        library.playbackPositions[guid] = seconds
-        cachedLibrary = library
-        flushToDisk()
+        update(flushImmediately: true) { library in
+            library.playbackPositions[guid] = seconds
+        }
+    }
+
+    /// Position and last-played episode in one disk write. Used by the playback tick.
+    func savePlaybackProgress(seconds: Double, guid: String, feedURL: String?) {
+        update(flushImmediately: true) { library in
+            library.playbackPositions[guid] = seconds
+            if let feedURL {
+                library.lastPlayedEpisodeGUID = guid
+                library.lastPlayedFeedURL = feedURL
+            }
+        }
     }
 
     func playbackPosition(for guid: String) -> Double {
@@ -208,9 +232,9 @@ final class PersistenceManager {
     }
 
     func markPlayed(_ guid: String) {
-        var library = loadLibrary()
-        library.playedEpisodeGUIDs.insert(guid)
-        saveLibrary(library)
+        update { library in
+            library.playedEpisodeGUIDs.insert(guid)
+        }
     }
 
     func isPlayed(_ guid: String) -> Bool {
@@ -220,11 +244,10 @@ final class PersistenceManager {
     // MARK: - Last Played Episode
 
     func saveLastPlayedEpisode(guid: String, feedURL: String) {
-        var library = loadLibrary()
-        library.lastPlayedEpisodeGUID = guid
-        library.lastPlayedFeedURL = feedURL
-        cachedLibrary = library
-        scheduleSave()
+        update { library in
+            library.lastPlayedEpisodeGUID = guid
+            library.lastPlayedFeedURL = feedURL
+        }
     }
 
     /// Loads the last played episode from the episode cache, if available.
@@ -245,9 +268,9 @@ final class PersistenceManager {
     }
 
     func setSkipSeconds(_ seconds: Int?, for feedURL: String) {
-        var library = loadLibrary()
-        library.podcastSkipSeconds[feedURL] = seconds
-        saveLibrary(library)
+        update { library in
+            library.podcastSkipSeconds[feedURL] = seconds
+        }
     }
 
     // MARK: - Episode Cache
@@ -286,26 +309,31 @@ final class PersistenceManager {
         let cachedEpisodes = cachedEpisodes(for: feedURL) ?? []
         let guids = Set(cachedEpisodes.map { $0.guid })
 
-        var library = loadLibrary()
-
-        // Remove downloaded files and tracked GUIDs
         for episode in cachedEpisodes {
             let fileURL = localFileURL(for: episode)
             try? fileManager.removeItem(at: fileURL)
         }
-        library.downloadedEpisodeGUIDs.subtract(guids)
+        try? fileManager.removeItem(at: episodeCacheURL(for: feedURL))
 
-        // Remove playback positions and played markers for these episodes
-        for guid in guids {
-            library.playbackPositions.removeValue(forKey: guid)
-            library.playedEpisodeGUIDs.remove(guid)
+        update { library in
+            library.downloadedEpisodeGUIDs.subtract(guids)
+            for guid in guids {
+                library.playbackPositions.removeValue(forKey: guid)
+                library.playedEpisodeGUIDs.remove(guid)
+            }
+            if library.lastPlayedFeedURL == feedURL
+                || guids.contains(library.lastPlayedEpisodeGUID ?? "") {
+                library.lastPlayedEpisodeGUID = nil
+                library.lastPlayedFeedURL = nil
+            }
+            library.podcastSkipSeconds.removeValue(forKey: feedURL)
         }
 
-        // Remove the episode cache file
-        let cacheURL = episodeCacheURL(for: feedURL)
-        try? fileManager.removeItem(at: cacheURL)
-
-        saveLibrary(library)
+        let excluded = AppSettings.randomExcludedFeedURLs
+        let kept = excluded.filter { $0 != feedURL }
+        if kept.count != excluded.count {
+            AppSettings.randomExcludedFeedURLs = kept
+        }
     }
 
     func clearAllData() {

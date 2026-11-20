@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import AVFoundation
 import UIKit
 
 @main
@@ -53,7 +52,7 @@ struct QuietCastApp: App {
                 // Re-enable volume lock if a scheduled re-enable time has passed
                 AudioPlayer.shared.checkVolumeRangeReenableSchedule()
 
-                // Only dim during nighttime hours (8 PM – 8 AM)
+                // Only dim during nighttime hours (TimeGate.nightHoursText)
                 if !TimeGate.searchAllowed() {
                     if previousBrightness == nil {
                         previousBrightness = screen.brightness
@@ -62,21 +61,15 @@ struct QuietCastApp: App {
                     screen.brightness = dimmed
                 }
 
-                // Enforce system volume range on app open (nighttime or always-on)
-                let shouldEnforce = !TimeGate.searchAllowed() || AppSettings.volumeRangeAlwaysOn
-                if shouldEnforce && AudioPlayer.shared.systemVolumeCapEnabled {
+                // Enforce system volume range on app open when the lock is on.
+                // VolumeEnforcer applies the nighttime / always-on check itself.
+                if AudioPlayer.shared.systemVolumeCapEnabled {
                     let enforcer = VolumeEnforcer.shared
                     enforcer.installVolumeView()
                     // Small delay to let the volume view attach
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        let current = AVAudioSession.sharedInstance().outputVolume
-                        let cap = AppSettings.systemVolumeCap
-                        let floor = AppSettings.systemVolumeFloor
-                        if current > cap {
-                            enforcer.setMaxSystemVolume()
-                        } else if current < floor {
-                            enforcer.setMinSystemVolume()
-                        }
+                        enforcer.enforceSystemVolumeCap()
+                        enforcer.enforceSystemVolumeFloor()
                     }
                 }
             case .inactive, .background:

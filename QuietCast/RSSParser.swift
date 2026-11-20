@@ -17,6 +17,20 @@ final class RSSParser: NSObject, XMLParserDelegate {
     private var feedURL: String
     private let logger = Logger(subsystem: "com.quietcast", category: "RSSParser")
 
+    private static let rfc2822Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+        return formatter
+    }()
+
+    private static let displayDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
     /// True when the last `parse(data:)` hit an XML error.
     private(set) var parseFailed = false
 
@@ -165,14 +179,8 @@ final class RSSParser: NSObject, XMLParserDelegate {
 
     /// Parse an RFC 2822 pubDate into a display string and a timestamp.
     private func parsePubDate(_ raw: String) -> (display: String, timestamp: Double?) {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
-        if let date = formatter.date(from: raw) {
-            let display = DateFormatter()
-            display.dateStyle = .medium
-            display.timeStyle = .none
-            return (display.string(from: date), date.timeIntervalSince1970)
+        if let date = Self.rfc2822Formatter.date(from: raw) {
+            return (Self.displayDateFormatter.string(from: date), date.timeIntervalSince1970)
         }
         return (raw, nil)
     }

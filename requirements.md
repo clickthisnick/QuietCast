@@ -29,7 +29,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 |------|---------|
 | `QuietCastApp.swift` | App entry point. Sets up audio session, dims screen at night, enforces volume bounds on app open, flushes saves on background and on `willTerminate`, and reconnects the background download session. |
 | `ContentView.swift` | Root view — renders `LibraryView`. |
-| `LibraryView.swift` | Main podcast list. Swipe-to-delete, reorder sheet, feed URL entry, search access. Resume card for last-played episode. |
+| `LibraryView.swift` | Main podcast list. Swipe-to-delete, reorder sheet, feed URL entry, search access. Resume card for last-played episode. Downloaded section listing offline episodes across the library. |
 | `EpisodeListView.swift` | Episode list for a podcast. Play/pause, download, shuffle button, per-podcast intro skip setting. |
 | `NowPlayingBar.swift` | Persistent transport bar with scrubber, sleep timer, skip, speed controls, noise cancellation toggle. |
 | `SearchView.swift` | iTunes podcast search (time-gated). |
@@ -67,7 +67,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
   - Build timestamp (e.g., "Built Jun 5, 2026 at 3:42 PM")
 - **Search hours notice**: When search is unavailable (8 PM – 8 AM), a caption reads "Search is available between 8 AM and 8 PM."
 - **Resume last played**: When no episode is currently playing and a last-played episode exists on disk, a resume card appears above the podcast list showing the episode title, podcast name, saved position (e.g. "1h 23m in"), and a play button. Tapping it resumes from the saved position. The card disappears once playback starts.
-- **Storage diagnostics**: When the podcast list is empty, the empty state shows debug info (App Group availability, container ID, path, and library.json existence) in a quaternary caption to aid troubleshooting.
+- **Downloaded episodes**: When at least one episode is downloaded, a "Downloaded" section appears at the top of the library list, above the resume card. It lists every downloaded episode across all podcasts. Each row shows the episode title, the podcast name, and progress from the saved playback position and played flag. When the episode duration and a saved position are both known, the row shows remaining time (e.g. "42m left" or "1h 5m left"). Otherwise it shows the saved position (e.g. "1h 23m in"), "Played", or "New". Under a minute is shown as "<1m". While that episode is the one loaded in `AudioPlayer` and the player knows its duration, the row shows remaining time from the player so it keeps up with playback. Tapping a row sets `currentFeedURL` to that podcast and calls `AudioPlayer.play`, which resumes from the saved position. Swiping left, including a full swipe, shows Remove and deletes only the offline file via `DownloadManager.removeDownload`. The podcast, the saved position, and the played flag stay. The section is hidden when nothing is downloaded. It updates when `downloadedGUIDs` changes — a download finishes, a download is removed, a podcast is deleted, or all data is cleared — and when the podcast list changes. Rows are built from each podcast's episode cache, in library order, then feed order. An episode appears after that podcast's episodes have been cached and the audio file is on disk. A saved position wins over the played flag, so a replayed episode shows remaining time instead of "Played".
 - **Data cleared listener**: Resets podcast list when `QuietCastDataCleared` notification fires.
 - **Search availability polling**: Re-checks `TimeGate.searchAllowed()` every 30 seconds.
 
@@ -123,7 +123,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 
 ### 5. Remote Commands (Lock Screen & Headphones)
 
-- **Play/Pause**: Standard play, pause, and toggle commands.
+- **Play/Pause**: Standard play, pause, and toggle commands. Play starts or resumes and does not pause audio that is already playing. Pause only pauses. Toggle still switches.
 - **Skip forward/back**: 30-second skip in both directions.
 - **Next track (double-press crown)**: Pauses current audio, speaks the podcast name and episode title, then plays the random episode. Uses `nextTrackCommand`. Only draws from podcasts selected in Settings.
 - **Previous track (triple-press crown)**: Pauses current audio, speaks the current time aloud (e.g., "The time is 11:42 PM"), then resumes playback at the current playback rate. Uses `previousTrackCommand`.
@@ -210,7 +210,7 @@ Three layers of volume control, each serving a different purpose:
 
 ### 11. Time Gate
 
-- **Search hours**: 8:00 AM – 7:59 PM local time.
+- **Search hours**: 8:00 AM – 7:59 PM local time. User-facing copies of that window (`searchHoursText`, `nightHoursText`, `searchHoursSentence`) live on `TimeGate`.
 - **Nighttime hours**: 8:00 PM – 7:59 AM local time (inverse of search hours).
 - **Used by**: Search visibility, screen dimming, system volume enforcement.
 
@@ -231,7 +231,7 @@ Three layers of volume control, each serving a different purpose:
 - **Temp files**: The system download is moved to the final path before the delegate returns. If the GUID is unknown, the file is parked in `tmp/quietcast-incoming` and deleted once it still cannot be matched. That directory is swept on the next launch.
 - **Download states**: Not downloaded → Downloading (with progress) → Downloaded.
 - **Cancel**: Cancels active task, removes partial file, cleans up tracking state.
-- **Remove**: Deletes local file, removes from `downloadedGUIDs`, saves state.
+- **Remove**: Deletes local file, removes from `downloadedGUIDs`, saves state. The library's Downloaded section calls this on swipe-to-delete. Playback position and played status are left as they are.
 - **Cancel all for podcast**: `cancelAllDownloads(for:)` — uses cached episode data (no network call) to find and cancel all active downloads for a podcast.
 - **Cancel all active**: `cancelAllActiveDownloads()` — cancels every in-flight download task and clears all tracking state. Used by Clear All Data.
 - **Thread safety**: The URLSession callback is not on the main actor. When the task's GUID is known, the file is moved to its final path before the callback returns, and library bookkeeping is updated on the main actor. The system deletes the temporary download as soon as the callback returns, so that move cannot wait.
@@ -246,7 +246,7 @@ Three layers of volume control, each serving a different purpose:
 - **In-memory cache**: Avoids repeated disk reads; `cachedLibrary` is updated in memory and periodically flushed.
 - **Debounced saves**: 500ms debounce window for rapid updates. Playback position saves flush immediately to disk to survive force-quits. Disk write failures are logged via `os.Logger`.
 - **Flush on background and termination**: `flushToDisk()` runs when the app enters `.inactive` or `.background`, and from `UIApplication.willTerminateNotification` when iOS delivers it.
-- **Remove all data for podcast**: `removeAllData(for:)` deletes downloaded files, episode cache, playback positions, and played markers — all locally, no network call required.
+- **Remove all data for podcast**: `removeAllData(for:)` deletes downloaded files, the episode cache, playback positions, and played markers. It also clears that podcast's last-played entry, intro-skip override, and "Include in Random" exclusion. All of this is local. No network call is required.
 - **Clear all data**: Pauses playback, clears the overwrite block, deletes `library.json`, every `download_*` file, and every `cache_*` file. Then cancels in-flight download tasks and clears `downloadedGUIDs`. Posts `QuietCastDataCleared`, which resets the library list. `library.json.corrupt-*` backups are not deleted.
 - **Episode cache logging**: Episode cache write failures are logged via `os.Logger`.
 
@@ -347,13 +347,13 @@ Organized into sections:
 struct Podcast: Codable, Identifiable, Equatable, Hashable {
     var id: String { feedURL }
     let title: String
-    let author: String
     let artworkURL: String
     let feedURL: String
 }
 ```
 - Identity based on `feedURL`.
 - `Hashable` conformance for `navigationDestination(item:)`.
+- Older `library.json` files may still contain an `author` key. Decoding ignores unknown keys, so those files still load.
 
 ### Episode
 ```swift

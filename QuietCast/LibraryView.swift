@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     var audioPlayer: AudioPlayer { AudioPlayer.shared }
+    var downloadManager: DownloadManager { DownloadManager.shared }
     @State private var podcasts: [Podcast] = []
     @State private var showSearch = false
     @State private var searchAllowed = TimeGate.searchAllowed()
@@ -148,27 +149,14 @@ struct LibraryView: View {
                     .multilineTextAlignment(.center)
             }
             Spacer()
-
-            // Debug: storage diagnostics
-            VStack(alignment: .leading, spacing: 4) {
-                let pm = PersistenceManager.shared
-                let dir = pm.documentsDirectory()
-                let groupAvailable = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: PersistenceManager.appGroupID) != nil
-                Text("App Group: \(groupAvailable ? "✓" : "✗ NOT AVAILABLE")")
-                Text("ID: \(PersistenceManager.appGroupID)")
-                Text("Path: \(dir.path)")
-                let fileExists = FileManager.default.fileExists(atPath: dir.appendingPathComponent("library.json").path)
-                Text("library.json: \(fileExists ? "exists" : "not found")")
-            }
-            .font(.caption2)
-            .foregroundStyle(.quaternary)
-            .padding()
         }
         .padding()
     }
 
     private var podcastList: some View {
         List {
+            downloadedSection
+
             // Resume last played episode
             if audioPlayer.currentEpisode == nil, let episode = lastPlayedEpisode {
                 resumeCard(for: episode)
@@ -227,7 +215,7 @@ struct LibraryView: View {
 
             if !searchAllowed {
                 Section {
-                    Text("Search is available between 8 AM and 8 PM.")
+                    Text("Search is available between \(TimeGate.searchHoursSentence).")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity)
@@ -264,6 +252,63 @@ struct LibraryView: View {
         }
     }
 
+    /// Offline episodes from every podcast, in library order. Reading
+    /// `downloadedGUIDs` keeps the section in sync when a download finishes or is removed.
+    @ViewBuilder
+    private var downloadedSection: some View {
+        let downloads = downloadedEpisodes
+        if !downloads.isEmpty {
+            Section {
+                ForEach(downloads) { item in
+                    DownloadedEpisodeRow(episode: item.episode, podcastName: item.podcastName)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            // Same play path as the resume card: feed URL first, so intro
+                            // skip and last-played persistence resolve to this podcast.
+                            audioPlayer.currentFeedURL = item.feedURL
+                            audioPlayer.play(episode: item.episode)
+                        }
+                        .accessibilityAddTraits(.isButton)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                downloadManager.removeDownload(for: item.episode)
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
+                }
+            } header: {
+                Text("Downloaded")
+                    .textCase(nil)
+            }
+        }
+    }
+
+    private var downloadedEpisodes: [DownloadedEpisode] {
+        let guids = downloadManager.downloadedGUIDs
+        guard !guids.isEmpty else { return [] }
+
+        var seen: Set<String> = []
+        var items: [DownloadedEpisode] = []
+        for podcast in podcasts {
+            guard let episodes = PersistenceManager.shared.cachedEpisodes(for: podcast.feedURL) else { continue }
+            for episode in episodes {
+                guard guids.contains(episode.guid) else { continue }
+                guard !seen.contains(episode.guid) else { continue }
+                seen.insert(episode.guid)
+                guard downloadManager.isDownloaded(episode) else { continue }
+                let trimmedTitle = podcast.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let podcastName = trimmedTitle.isEmpty ? episode.podcastTitle : trimmedTitle
+                items.append(DownloadedEpisode(
+                    episode: episode,
+                    feedURL: podcast.feedURL,
+                    podcastName: podcastName
+                ))
+            }
+        }
+        return items
+    }
+
     private func resumeCard(for episode: Episode) -> some View {
         Button {
             // Set feedURL so AudioPlayer can look up podcast-specific settings
@@ -290,7 +335,7 @@ struct LibraryView: View {
                             Text("·")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text("\(formatResumeTime(saved)) in")
+                            Text("\(AppSettings.hoursMinutes(saved)) in")
                                 .font(.caption2)
                                 .foregroundStyle(Color.warmAccent)
                         }
@@ -302,16 +347,6 @@ struct LibraryView: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-    }
-
-    private func formatResumeTime(_ seconds: Double) -> String {
-        let total = max(Int(seconds), 0)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m)m"
     }
 
     private func loadLibrary() {
@@ -377,15 +412,14 @@ struct LibraryView: View {
 
                 let podcast = Podcast(
                     title: title,
-                    author: "",
                     artworkURL: artwork,
                     feedURL: trimmed
                 )
 
                 podcasts.append(podcast)
-                var library = PersistenceManager.shared.loadLibrary()
-                library.podcasts = podcasts
-                PersistenceManager.shared.saveLibrary(library)
+                PersistenceManager.shared.update { library in
+                    library.podcasts = podcasts
+                }
             } catch let error as URLError where error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
                 addURLError = "No internet connection. Check your network and try again."
                 showAddURL = true
@@ -404,9 +438,133 @@ struct LibraryView: View {
         PersistenceManager.shared.removeAllData(for: podcast)
 
         podcasts.removeAll { $0.feedURL == podcast.feedURL }
-        var library = PersistenceManager.shared.loadLibrary()
-        library.podcasts = podcasts
-        PersistenceManager.shared.saveLibrary(library)
+        PersistenceManager.shared.update { library in
+            library.podcasts = podcasts
+        }
+    }
+}
+
+private struct DownloadedEpisode: Identifiable {
+    let episode: Episode
+    let feedURL: String
+    let podcastName: String
+
+    var id: String { episode.guid }
+}
+
+private struct DownloadedEpisodeRow: View {
+    let episode: Episode
+    let podcastName: String
+    var audioPlayer: AudioPlayer { AudioPlayer.shared }
+
+    private enum DownloadProgress {
+        case fresh
+        case remaining(String)
+        case elapsed(String)
+        case played
+    }
+
+    private var isCurrent: Bool {
+        audioPlayer.currentEpisode?.guid == episode.guid
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(episode.title)
+                .font(.subheadline)
+                .foregroundStyle(isCurrent ? Color.warmAccent : Color.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            HStack(spacing: 4) {
+                Text(podcastName)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                    .fixedSize()
+                progressLabel
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .font(.caption2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+    }
+
+    /// Player remaining time for the loaded episode; otherwise the saved position,
+    /// played flag, or "New".
+    @ViewBuilder
+    private var progressLabel: some View {
+        switch currentProgress {
+        case .played:
+            Text("Played")
+                .foregroundStyle(.tertiary)
+        case .fresh:
+            Text("New")
+                .foregroundStyle(Color.warmAccent)
+        case .remaining(let value):
+            Text("\(value) left")
+                .foregroundStyle(Color.warmAccent)
+        case .elapsed(let value):
+            Text("\(value) in")
+                .foregroundStyle(Color.warmAccent)
+        }
+    }
+
+    private var currentProgress: DownloadProgress {
+        if audioPlayer.currentEpisode?.guid == episode.guid {
+            let duration = audioPlayer.duration
+            if duration.isFinite, duration > 0 {
+                let remaining = duration - audioPlayer.currentTime
+                if remaining.isFinite {
+                    return .remaining(Self.formatSpan(max(remaining, 0)))
+                }
+            }
+        }
+
+        let position = PersistenceManager.shared.playbackPosition(for: episode.guid)
+        if position.isFinite, position > 0 {
+            if let total = Self.durationSeconds(episode.duration), total > position {
+                return .remaining(Self.formatSpan(total - position))
+            }
+            return .elapsed(Self.formatSpan(position))
+        }
+        if PersistenceManager.shared.isPlayed(episode.guid) {
+            return .played
+        }
+        return .fresh
+    }
+
+    /// `itunes:duration` is seconds, minutes:seconds, or hours:minutes:seconds.
+    private static func durationSeconds(_ raw: String) -> Double? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let pieces = trimmed.split(separator: ":")
+        if pieces.count == 1 {
+            guard let seconds = Double(trimmed), seconds.isFinite, seconds > 0 else { return nil }
+            return seconds
+        }
+        guard pieces.count == 2 || pieces.count == 3 else { return nil }
+        var total = 0.0
+        for piece in pieces {
+            let part = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let value = Double(part), value.isFinite, value >= 0 else { return nil }
+            total = total * 60 + value
+        }
+        guard total.isFinite, total > 0 else { return nil }
+        return total
+    }
+
+    private static func formatSpan(_ seconds: Double) -> String {
+        guard seconds.isFinite else { return "<1m" }
+        // Keep the conversion inside Int's range. Episode lengths are far smaller.
+        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
+        if bounded < 60 {
+            return "<1m"
+        }
+        return AppSettings.hoursMinutes(bounded)
     }
 }
 
@@ -422,9 +580,9 @@ private struct ReorderPodcastsView: View {
                 }
                 .onMove { from, to in
                     podcasts.move(fromOffsets: from, toOffset: to)
-                    var library = PersistenceManager.shared.loadLibrary()
-                    library.podcasts = podcasts
-                    PersistenceManager.shared.saveLibrary(library)
+                    PersistenceManager.shared.update { library in
+                        library.podcasts = podcasts
+                    }
                 }
             }
             .environment(\.editMode, .constant(.active))

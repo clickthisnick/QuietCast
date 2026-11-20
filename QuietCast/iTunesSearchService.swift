@@ -20,7 +20,6 @@ struct iTunesPodcast: Decodable, Identifiable {
         guard let feedUrl else { return nil }
         return Podcast(
             title: collectionName,
-            author: artistName,
             artworkURL: artworkUrl100 ?? "",
             feedURL: feedUrl
         )
