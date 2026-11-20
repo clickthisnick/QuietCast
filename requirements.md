@@ -224,11 +224,11 @@ Three layers of volume control, each serving a different purpose:
 ### 13. Downloads
 
 - **Background session**: `URLSessionConfiguration.background` with identifier `com.quietcast.downloads`. `sessionSendsLaunchEvents` is true. `QuietCastApp` creates the session at launch. If iOS relaunches the app for the transfer, `QuietCastAppDelegate` passes the system completion handler to `DownloadManager` before the session is recreated, and `urlSessionDidFinishEvents` calls that handler after the library is flushed.
-- **Task identity**: `taskDescription` stores the episode GUID. Background sessions keep that string across relaunch, when the in-memory task maps are empty. Completion uses it to find the destination file.
+- **Task identity**: `taskDescription` stores the episode GUID. Background sessions keep that string across relaunch. The destination path is `localFileURL(forEpisodeGUID:)`. A task that is still in memory but has no description is matched by the task object. A finished download with no GUID at all is not saved.
 - **HTTP**: Only a 2xx response is saved. Any other status, or a missing HTTP response, is discarded and not written as audio.
-- **Progress tracking**: Per-episode progress (0–1) in `activeDownloads` dictionary. Progress callbacks fall back to `taskDescription` when the in-memory map has no entry.
+- **Progress tracking**: Per-episode progress (0–1) in `activeDownloads`. The callback reads the GUID from `taskDescription`, and falls back to the in-memory task only when that string is missing.
 - **File storage**: Downloaded episodes saved as `download_{sanitized_guid}.mp3` in the App Group container (`group.com.quietcast.shared`), falling back to the app Documents directory when that container is unavailable. Each file is marked `isExcludedFromBackup` (existing files are marked again when `DownloadManager` starts) so episode audio is left out of iCloud backup.
-- **Temp files**: The system download is moved to the final path before the delegate returns. If the GUID is unknown, the file is parked in `tmp/quietcast-incoming` and deleted once it still cannot be matched. That directory is swept on the next launch.
+- **Temp files**: When the GUID is known, the system download is moved to the final path before the delegate returns. If the GUID is not on the task, the file is parked in `tmp/quietcast-incoming` and deleted once it still cannot be matched to an in-memory task. That directory is swept on the next launch.
 - **Download states**: Not downloaded → Downloading (with progress) → Downloaded.
 - **Cancel**: Cancels active task, removes partial file, cleans up tracking state.
 - **Remove**: Deletes local file, removes from `downloadedGUIDs`, saves state. The library's Downloaded section calls this on swipe-to-delete. Playback position and played status are left as they are.
