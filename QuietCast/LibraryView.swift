@@ -409,11 +409,15 @@ struct LibraryView: View {
                 PersistenceManager.shared.update { library in
                     library.podcasts = podcasts
                 }
-            } catch FeedError.offline {
-                addURLError = "No internet connection. Check your network and try again."
-                showAddURL = true
-            } catch FeedError.httpStatus, FeedError.notHTTP {
-                addURLError = "Could not load feed. The server returned an error."
+            } catch let error as FeedError {
+                switch error {
+                case .offline:
+                    addURLError = "No internet connection. Check your network and try again."
+                case .httpStatus, .notHTTP:
+                    addURLError = "Could not load feed. The server returned an error."
+                case .invalidURL, .timedOut, .other:
+                    addURLError = "Could not load feed. Check the URL and try again."
+                }
                 showAddURL = true
             } catch {
                 addURLError = "Could not load feed. Check the URL and try again."
