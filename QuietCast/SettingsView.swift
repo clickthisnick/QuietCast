@@ -3,14 +3,15 @@ import MediaPlayer
 
 struct SettingsView: View {
     var audioPlayer: AudioPlayer { AudioPlayer.shared }
+    private var settings: AppSettings { AppSettings.shared }
     @Environment(\.dismiss) private var dismiss
     @State private var showClearAll = false
-    @State private var randomEpisodeAgeDays: Int = AppSettings.randomEpisodeAgeDays
-    @State private var defaultSkipIntroSeconds: Int = AppSettings.defaultSkipIntroSeconds
-    @State private var volumeRangeAutoReenableMinutes: Int = AppSettings.volumeRangeAutoReenableMinutes
     @State private var podcasts: [Podcast] = []
-    @State private var excludedFeedURLs: Set<String> = Set(AppSettings.randomExcludedFeedURLs)
     private let reenableOptions = [0, 30, 60, 120, 180]
+
+    private var excludedFeedURLs: Set<String> {
+        Set(settings.randomExcludedFeedURLs)
+    }
 
     var body: some View {
         NavigationStack {
@@ -18,8 +19,8 @@ struct SettingsView: View {
                 // Playback
                 Section("Playback") {
                     Toggle(isOn: Binding(
-                        get: { audioPlayer.autoPlayNext },
-                        set: { audioPlayer.setAutoPlayNext($0) }
+                        get: { settings.autoPlayNext },
+                        set: { settings.autoPlayNext = $0 }
                     )) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Auto-Play Next Episode")
@@ -34,11 +35,11 @@ struct SettingsView: View {
 
                     VolumeLimitRow(
                         title: "Volume Limit",
-                        value: audioPlayer.maxVolume,
+                        value: settings.maxVolume,
                         range: 0.1...1.0,
                         step: 0.05,
                         caption: "Caps in-app volume. Useful for sleep — keeps audio quiet even if your phone volume is high.",
-                        set: { audioPlayer.setMaxVolume($0) }
+                        set: { settings.maxVolume = $0 }
                     )
                     .padding(.vertical, 4)
 
@@ -46,12 +47,11 @@ struct SettingsView: View {
                         OptionMenuRow(
                             title: "Skip Intro",
                             options: AppSettings.skipIntroOptions,
-                            selection: defaultSkipIntroSeconds,
+                            selection: settings.defaultSkipIntroSeconds,
                             menuLabel: { $0 == 0 ? "Off" : "\($0) seconds" },
                             capsuleLabel: { $0 == 0 ? "Off" : "\($0)s" }
                         ) { seconds in
-                            defaultSkipIntroSeconds = seconds
-                            AppSettings.defaultSkipIntroSeconds = seconds
+                            settings.defaultSkipIntroSeconds = seconds
                         }
                         Text("Automatically skip the first seconds of each episode. Override per podcast from the episode list toolbar.")
                             .font(.caption2)
@@ -65,8 +65,8 @@ struct SettingsView: View {
                 // System Volume Cap
                 Section("System Volume Cap") {
                     Toggle(isOn: Binding(
-                        get: { audioPlayer.systemVolumeCapEnabled },
-                        set: { audioPlayer.setSystemVolumeCapEnabled($0) }
+                        get: { settings.systemVolumeCapEnabled },
+                        set: { settings.systemVolumeCapEnabled = $0 }
                     )) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Lock Volume Range")
@@ -83,14 +83,13 @@ struct SettingsView: View {
                         OptionMenuRow(
                             title: "Auto Re-Enable",
                             options: reenableOptions,
-                            selection: volumeRangeAutoReenableMinutes,
+                            selection: settings.volumeRangeAutoReenableMinutes,
                             menuLabel: minutesChoiceLabel
                         ) { minutes in
-                            volumeRangeAutoReenableMinutes = minutes
-                            audioPlayer.setVolumeRangeAutoReenableMinutes(minutes)
+                            settings.volumeRangeAutoReenableMinutes = minutes
                         }
 
-                        if !audioPlayer.systemVolumeCapEnabled, let reenableAt = audioPlayer.volumeRangeReenableAt {
+                        if !settings.systemVolumeCapEnabled, let reenableAt = settings.volumeRangeReenableAt {
                             TimelineView(.periodic(from: .now, by: 1)) { context in
                                 let remaining = reenableAt.timeIntervalSince(context.date)
                                 Text(remaining > 0 ? "Lock will re-enable in \(AppSettings.hoursMinutes(remaining.rounded()))" : "Lock will re-enable now")
@@ -105,10 +104,10 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
 
-                    if audioPlayer.systemVolumeCapEnabled {
+                    if settings.systemVolumeCapEnabled {
                         Toggle(isOn: Binding(
-                            get: { audioPlayer.volumeRangeAlwaysOn },
-                            set: { audioPlayer.setVolumeRangeAlwaysOn($0) }
+                            get: { settings.volumeRangeAlwaysOn },
+                            set: { settings.volumeRangeAlwaysOn = $0 }
                         )) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Always Enforce")
@@ -122,7 +121,7 @@ struct SettingsView: View {
                         .padding(.vertical, 4)
                     }
 
-                    if audioPlayer.systemVolumeCapEnabled {
+                    if settings.systemVolumeCapEnabled {
                         // Noise Cancellation ON volumes
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Noise Cancellation On", systemImage: "ear.fill")
@@ -130,13 +129,13 @@ struct SettingsView: View {
                                 .foregroundStyle(Color.warmAccent)
                             VolumeLimitRow(
                                 title: "Max Volume",
-                                value: audioPlayer.systemVolumeCapNC,
-                                set: { audioPlayer.setSystemVolumeCapNC($0) }
+                                value: settings.systemVolumeCapNC,
+                                set: { settings.systemVolumeCapNC = $0 }
                             )
                             VolumeLimitRow(
                                 title: "Min Volume",
-                                value: audioPlayer.systemVolumeFloorNC,
-                                set: { audioPlayer.setSystemVolumeFloorNC($0) }
+                                value: settings.systemVolumeFloorNC,
+                                set: { settings.systemVolumeFloorNC = $0 }
                             )
                         }
                         .padding(.vertical, 4)
@@ -148,13 +147,13 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                             VolumeLimitRow(
                                 title: "Max Volume",
-                                value: audioPlayer.systemVolumeCapNoNC,
-                                set: { audioPlayer.setSystemVolumeCapNoNC($0) }
+                                value: settings.systemVolumeCapNoNC,
+                                set: { settings.systemVolumeCapNoNC = $0 }
                             )
                             VolumeLimitRow(
                                 title: "Min Volume",
-                                value: audioPlayer.systemVolumeFloorNoNC,
-                                set: { audioPlayer.setSystemVolumeFloorNoNC($0) }
+                                value: settings.systemVolumeFloorNoNC,
+                                set: { settings.systemVolumeFloorNoNC = $0 }
                             )
                             Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced \(TimeGate.nightHoursText), or always if enabled above.")
                                 .font(.caption2)
@@ -189,18 +188,15 @@ struct SettingsView: View {
                             Text("Minimum Age")
                                 .font(.subheadline)
                             Spacer()
-                            Text("\(randomEpisodeAgeDays) days")
+                            Text("\(settings.randomEpisodeAgeDays) days")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                         Slider(
                             value: Binding(
-                                get: { Double(randomEpisodeAgeDays) },
-                                set: {
-                                    randomEpisodeAgeDays = Int($0)
-                                    AppSettings.randomEpisodeAgeDays = randomEpisodeAgeDays
-                                }
+                                get: { Double(settings.randomEpisodeAgeDays) },
+                                set: { settings.randomEpisodeAgeDays = Int($0) }
                             ),
                             in: 7...365,
                             step: 7
@@ -354,12 +350,13 @@ struct SettingsView: View {
     }
 
     private func togglePodcast(_ feedURL: String) {
-        if excludedFeedURLs.contains(feedURL) {
-            excludedFeedURLs.remove(feedURL)
+        var urls = settings.randomExcludedFeedURLs
+        if let index = urls.firstIndex(of: feedURL) {
+            urls.remove(at: index)
         } else {
-            excludedFeedURLs.insert(feedURL)
+            urls.append(feedURL)
         }
-        AppSettings.randomExcludedFeedURLs = Array(excludedFeedURLs)
+        settings.randomExcludedFeedURLs = urls
     }
 
     private var appVersion: String {
@@ -379,7 +376,7 @@ struct SettingsView: View {
 /// Auto-Pause setting — extracted into its own view to keep the big List
 /// lightweight for the Swift compiler.
 private struct AutoPauseRow: View {
-    @State private var autoPauseMinutes: Int = AppSettings.autoPauseMinutes
+    private var settings: AppSettings { AppSettings.shared }
     private let options = [0, 15, 30, 45, 60, 90, 120, 180]
 
     var body: some View {
@@ -387,11 +384,10 @@ private struct AutoPauseRow: View {
             OptionMenuRow(
                 title: "Auto-Pause",
                 options: options,
-                selection: autoPauseMinutes,
+                selection: settings.autoPauseMinutes,
                 menuLabel: minutesChoiceLabel
             ) { minutes in
-                autoPauseMinutes = minutes
-                AppSettings.autoPauseMinutes = minutes
+                settings.autoPauseMinutes = minutes
             }
             Text("Automatically pauses after the selected duration, even as episodes auto-play overnight. The countdown isn’t reset by new episodes. Unpausing after it fires starts a fresh timer.")
                 .font(.caption2)
