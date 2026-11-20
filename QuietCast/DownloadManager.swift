@@ -143,9 +143,9 @@ final class DownloadManager {
     }
 
     func saveDownloadState() {
-        var library = PersistenceManager.shared.loadLibrary()
-        library.downloadedEpisodeGUIDs = downloadedGUIDs
-        PersistenceManager.shared.saveLibrary(library)
+        PersistenceManager.shared.update { library in
+            library.downloadedEpisodeGUIDs = downloadedGUIDs
+        }
     }
 
     /// Rebuild in-memory maps from tasks the system kept across relaunch.

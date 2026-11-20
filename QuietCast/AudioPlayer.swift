@@ -624,13 +624,11 @@ final class AudioPlayer {
     private func saveCurrentPosition() {
         guard let episode = currentEpisode, currentTime > 0 else { return }
         lastSavedTime = currentTime
-        let persistence = PersistenceManager.shared
-        persistence.savePlaybackPosition(currentTime, for: episode.guid)
-
-        // Persist last played episode for resume on next launch
-        if let feedURL = feedURLForCurrentEpisode() {
-            persistence.saveLastPlayedEpisode(guid: episode.guid, feedURL: feedURL)
-        }
+        PersistenceManager.shared.savePlaybackProgress(
+            seconds: currentTime,
+            guid: episode.guid,
+            feedURL: feedURLForCurrentEpisode()
+        )
     }
 
     // MARK: - Intro Skip

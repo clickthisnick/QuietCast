@@ -87,9 +87,9 @@ struct SearchView: View {
     private func addPodcast(_ podcast: Podcast) {
         guard !podcasts.contains(where: { $0.feedURL == podcast.feedURL }) else { return }
         podcasts.append(podcast)
-        var library = PersistenceManager.shared.loadLibrary()
-        library.podcasts = podcasts
-        PersistenceManager.shared.saveLibrary(library)
+        PersistenceManager.shared.update { library in
+            library.podcasts = podcasts
+        }
         dismiss()
     }
 }

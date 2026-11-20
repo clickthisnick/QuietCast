@@ -246,7 +246,7 @@ Three layers of volume control, each serving a different purpose:
 - **In-memory cache**: Avoids repeated disk reads; `cachedLibrary` is updated in memory and periodically flushed.
 - **Debounced saves**: 500ms debounce window for rapid updates. Playback position saves flush immediately to disk to survive force-quits. Disk write failures are logged via `os.Logger`.
 - **Flush on background and termination**: `flushToDisk()` runs when the app enters `.inactive` or `.background`, and from `UIApplication.willTerminateNotification` when iOS delivers it.
-- **Remove all data for podcast**: `removeAllData(for:)` deletes downloaded files, episode cache, playback positions, and played markers — all locally, no network call required.
+- **Remove all data for podcast**: `removeAllData(for:)` deletes downloaded files, the episode cache, playback positions, and played markers. It also clears that podcast's last-played entry, intro-skip override, and "Include in Random" exclusion. All of this is local. No network call is required.
 - **Clear all data**: Pauses playback, clears the overwrite block, deletes `library.json`, every `download_*` file, and every `cache_*` file. Then cancels in-flight download tasks and clears `downloadedGUIDs`. Posts `QuietCastDataCleared`, which resets the library list. `library.json.corrupt-*` backups are not deleted.
 - **Episode cache logging**: Episode cache write failures are logged via `os.Logger`.
 

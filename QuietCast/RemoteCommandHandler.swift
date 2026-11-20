@@ -82,7 +82,7 @@ final class RemoteCommandHandler {
         let excludedFeedURLs = Set(AppSettings.randomExcludedFeedURLs)
 
         let persistence = PersistenceManager.shared
-        var library = persistence.loadLibrary()
+        let library = persistence.loadLibrary()
 
         // Get included podcast feed URLs
         let includedFeedURLs = Set(library.podcasts
@@ -111,8 +111,9 @@ final class RemoteCommandHandler {
         }
 
         // Save updated rotation
-        library.crownPodcastRotation = rotation
-        persistence.saveLibrary(library)
+        persistence.update { library in
+            library.crownPodcastRotation = rotation
+        }
 
         guard let random = selectedEpisode else {
             isCrownActionActive = false

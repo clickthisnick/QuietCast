@@ -417,9 +417,9 @@ struct LibraryView: View {
                 )
 
                 podcasts.append(podcast)
-                var library = PersistenceManager.shared.loadLibrary()
-                library.podcasts = podcasts
-                PersistenceManager.shared.saveLibrary(library)
+                PersistenceManager.shared.update { library in
+                    library.podcasts = podcasts
+                }
             } catch let error as URLError where error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
                 addURLError = "No internet connection. Check your network and try again."
                 showAddURL = true
@@ -438,9 +438,9 @@ struct LibraryView: View {
         PersistenceManager.shared.removeAllData(for: podcast)
 
         podcasts.removeAll { $0.feedURL == podcast.feedURL }
-        var library = PersistenceManager.shared.loadLibrary()
-        library.podcasts = podcasts
-        PersistenceManager.shared.saveLibrary(library)
+        PersistenceManager.shared.update { library in
+            library.podcasts = podcasts
+        }
     }
 }
 
@@ -580,9 +580,9 @@ private struct ReorderPodcastsView: View {
                 }
                 .onMove { from, to in
                     podcasts.move(fromOffsets: from, toOffset: to)
-                    var library = PersistenceManager.shared.loadLibrary()
-                    library.podcasts = podcasts
-                    PersistenceManager.shared.saveLibrary(library)
+                    PersistenceManager.shared.update { library in
+                        library.podcasts = podcasts
+                    }
                 }
             }
             .environment(\.editMode, .constant(.active))
