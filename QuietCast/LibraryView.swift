@@ -215,7 +215,7 @@ struct LibraryView: View {
 
             if !searchAllowed {
                 Section {
-                    Text("Search is available between 8 AM and 8 PM.")
+                    Text("Search is available between \(TimeGate.searchHoursSentence).")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity)
@@ -335,7 +335,7 @@ struct LibraryView: View {
                             Text("·")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text("\(formatResumeTime(saved)) in")
+                            Text("\(AppSettings.hoursMinutes(saved)) in")
                                 .font(.caption2)
                                 .foregroundStyle(Color.warmAccent)
                         }
@@ -347,16 +347,6 @@ struct LibraryView: View {
             .padding(.vertical, 4)
         }
         .buttonStyle(.plain)
-    }
-
-    private func formatResumeTime(_ seconds: Double) -> String {
-        let total = max(Int(seconds), 0)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m)m"
     }
 
     private func loadLibrary() {
@@ -571,16 +561,10 @@ private struct DownloadedEpisodeRow: View {
         guard seconds.isFinite else { return "<1m" }
         // Keep the conversion inside Int's range. Episode lengths are far smaller.
         let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
-        let total = Int(bounded)
-        if total < 60 {
+        if bounded < 60 {
             return "<1m"
         }
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        return "\(minutes)m"
+        return AppSettings.hoursMinutes(bounded)
     }
 }
 

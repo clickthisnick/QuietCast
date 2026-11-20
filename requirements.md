@@ -210,7 +210,7 @@ Three layers of volume control, each serving a different purpose:
 
 ### 11. Time Gate
 
-- **Search hours**: 8:00 AM – 7:59 PM local time.
+- **Search hours**: 8:00 AM – 7:59 PM local time. User-facing copies of that window (`searchHoursText`, `nightHoursText`, `searchHoursSentence`) live on `TimeGate`.
 - **Nighttime hours**: 8:00 PM – 7:59 AM local time (inverse of search hours).
 - **Used by**: Search visibility, screen dimming, system volume enforcement.
 

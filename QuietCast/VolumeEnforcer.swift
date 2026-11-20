@@ -86,16 +86,6 @@ final class VolumeEnforcer {
         }
     }
 
-    /// Push system volume down to the cap.
-    func setMaxSystemVolume() {
-        setSystemVolume(AppSettings.systemVolumeCap)
-    }
-
-    /// Push system volume up to the floor.
-    func setMinSystemVolume() {
-        setSystemVolume(AppSettings.systemVolumeFloor)
-    }
-
     func setSystemVolume(_ volume: Float) {
         if volumeSlider == nil { installVolumeView() }
         volumeSlider?.value = volume

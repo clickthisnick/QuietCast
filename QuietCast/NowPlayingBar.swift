@@ -125,11 +125,11 @@ struct NowPlayingBar: View {
                 }
             }
 
-            // Skip back 30s
+            // Skip back
             Button {
                 audioPlayer.skipBackward()
             } label: {
-                Image(systemName: "gobackward.30")
+                Image(systemName: "gobackward.\(AppSettings.skipIntervalSeconds)")
                     .font(.title2)
                     .frame(minWidth: 44, minHeight: 44)
             }
@@ -153,11 +153,11 @@ struct NowPlayingBar: View {
                     .frame(minWidth: 44, minHeight: 44)
             }
 
-            // Skip forward 30s
+            // Skip forward
             Button {
                 audioPlayer.skipForward()
             } label: {
-                Image(systemName: "goforward.30")
+                Image(systemName: "goforward.\(AppSettings.skipIntervalSeconds)")
                     .font(.title2)
                     .frame(minWidth: 44, minHeight: 44)
             }

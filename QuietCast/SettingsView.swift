@@ -10,7 +10,6 @@ struct SettingsView: View {
     @State private var volumeRangeAutoReenableMinutes: Int = AppSettings.volumeRangeAutoReenableMinutes
     @State private var podcasts: [Podcast] = []
     @State private var excludedFeedURLs: Set<String> = Set(AppSettings.randomExcludedFeedURLs)
-    private let skipIntroOptions = [0, 10, 15, 30, 45, 60, 90, 120]
     private let reenableOptions = [0, 30, 60, 120, 180]
 
     var body: some View {
@@ -46,7 +45,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         OptionMenuRow(
                             title: "Skip Intro",
-                            options: skipIntroOptions,
+                            options: AppSettings.skipIntroOptions,
                             selection: defaultSkipIntroSeconds,
                             menuLabel: { $0 == 0 ? "Off" : "\($0) seconds" },
                             capsuleLabel: { $0 == 0 ? "Off" : "\($0)s" }
@@ -72,7 +71,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Lock Volume Range")
                                 .font(.subheadline)
-                            Text("Keeps system volume within a set range during nighttime hours (8 PM – 8 AM).")
+                            Text("Keeps system volume within a set range during nighttime hours (\(TimeGate.nightHoursText)).")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -94,7 +93,7 @@ struct SettingsView: View {
                         if !audioPlayer.systemVolumeCapEnabled, let reenableAt = audioPlayer.volumeRangeReenableAt {
                             TimelineView(.periodic(from: .now, by: 1)) { context in
                                 let remaining = reenableAt.timeIntervalSince(context.date)
-                                Text(remaining > 0 ? "Lock will re-enable in \(formatDuration(remaining))" : "Lock will re-enable now")
+                                Text(remaining > 0 ? "Lock will re-enable in \(AppSettings.hoursMinutes(remaining.rounded()))" : "Lock will re-enable now")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
@@ -157,7 +156,7 @@ struct SettingsView: View {
                                 value: audioPlayer.systemVolumeFloorNoNC,
                                 set: { audioPlayer.setSystemVolumeFloorNoNC($0) }
                             )
-                            Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced 8 PM – 8 AM, or always if enabled above.")
+                            Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced \(TimeGate.nightHoursText), or always if enabled above.")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -250,7 +249,7 @@ struct SettingsView: View {
                         infoItem(
                             icon: "clock",
                             title: "Search Hours",
-                            detail: "Podcast search is available 8 AM – 8 PM. You can always listen to saved podcasts and add feeds by URL."
+                            detail: "Podcast search is available \(TimeGate.searchHoursText). You can always listen to saved podcasts and add feeds by URL."
                         )
                         infoItem(
                             icon: "moon.zzz",
@@ -352,16 +351,6 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-    }
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        if h > 0 {
-            return "\(h)h \(m)m"
-        }
-        return "\(m)m"
     }
 
     private func togglePodcast(_ feedURL: String) {

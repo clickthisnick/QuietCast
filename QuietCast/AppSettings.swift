@@ -5,6 +5,25 @@ enum AppSettings {
     /// The user-facing app name. Change this single value to rename the app everywhere.
     static let appName = "QuietCast"
 
+    /// Per-podcast and global Skip Intro menu. `0` is off.
+    static let skipIntroOptions = [0, 10, 15, 30, 45, 60, 90, 120]
+
+    /// Skip forward and back, in seconds. Also the remote-command interval.
+    static let skipIntervalSeconds = 30
+
+    /// "1h 23m" or "5m". Truncates seconds. Under a minute is "0m".
+    static func hoursMinutes(_ seconds: Double) -> String {
+        guard seconds.isFinite else { return "0m" }
+        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
+        let total = Int(bounded)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+
     private static let defaults = UserDefaults(suiteName: PersistenceManager.appGroupID) ?? .standard
 
     // MARK: - Keys

@@ -40,7 +40,8 @@ final class RemoteCommandHandler {
             return .success
         }
 
-        center.skipForwardCommand.preferredIntervals = [30]
+        let skipInterval = NSNumber(value: AppSettings.skipIntervalSeconds)
+        center.skipForwardCommand.preferredIntervals = [skipInterval]
         center.skipForwardCommand.addTarget { _ in
             Task { @MainActor in
                 AudioPlayer.shared.skipForward()
@@ -48,7 +49,7 @@ final class RemoteCommandHandler {
             return .success
         }
 
-        center.skipBackwardCommand.preferredIntervals = [30]
+        center.skipBackwardCommand.preferredIntervals = [skipInterval]
         center.skipBackwardCommand.addTarget { _ in
             Task { @MainActor in
                 AudioPlayer.shared.skipBackward()
