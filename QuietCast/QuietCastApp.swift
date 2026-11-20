@@ -17,6 +17,10 @@ struct QuietCastApp: App {
     @State private var hasSetupAudioSession = false
 
     init() {
+        // Recreate the background download session on every launch so a transfer
+        // that finished while the app was gone can be moved into place.
+        _ = DownloadManager.shared
+
         // Flush saves on app termination (not always called, but helps when it is)
         NotificationCenter.default.addObserver(
             forName: UIApplication.willTerminateNotification,
