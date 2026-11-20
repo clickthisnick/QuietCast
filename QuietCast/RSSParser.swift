@@ -17,11 +17,18 @@ final class RSSParser: NSObject, XMLParserDelegate {
     private var feedURL: String
     private let logger = Logger(subsystem: "com.quietcast", category: "RSSParser")
 
+    /// True when the last `parse(data:)` hit an XML error.
+    private(set) var parseFailed = false
+
     init(feedURL: String) {
         self.feedURL = feedURL
     }
 
     func parse(data: Data) -> [Episode] {
+        episodes = []
+        parseFailed = false
+        podcastTitle = ""
+        podcastArtworkURL = ""
         // Convert to string, trying UTF-8 first, then Latin-1 as fallback
         let rawString: String
         if let str = String(data: data, encoding: .utf8) {
@@ -56,7 +63,9 @@ final class RSSParser: NSObject, XMLParserDelegate {
         let parser = XMLParser(data: cleanedData)
         parser.shouldResolveExternalEntities = false
         parser.delegate = self
-        parser.parse()
+        if !parser.parse() {
+            parseFailed = true
+        }
         return episodes
     }
 
@@ -150,6 +159,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
 
     func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
         // Don't clear episodes — return whatever we parsed before the error
+        parseFailed = true
         logger.warning("RSS parse error for \(self.feedURL): \(parseError.localizedDescription)")
     }
 

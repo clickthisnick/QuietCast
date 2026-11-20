@@ -352,8 +352,20 @@ struct LibraryView: View {
                 }
                 let parser = RSSParser(feedURL: trimmed)
                 let episodes = parser.parse(data: data)
+                if parser.parseFailed {
+                    addURLError = "Could not read this feed. Check the URL and try again."
+                    showAddURL = true
+                    return
+                }
+                if episodes.isEmpty {
+                    addURLError = "No episodes found. The feed may be empty or in an unsupported format."
+                    showAddURL = true
+                    return
+                }
 
-                let title = episodes.first?.podcastTitle ?? url.host ?? "Unknown Podcast"
+                let rawTitle = episodes.first?.podcastTitle
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let title = rawTitle.isEmpty ? (url.host ?? "Unknown Podcast") : rawTitle
                 let artwork = episodes.first?.artworkURL ?? ""
 
                 // Check by title too — same podcast might have a different feed URL
