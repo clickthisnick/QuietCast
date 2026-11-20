@@ -121,7 +121,13 @@ final class PersistenceManager {
     }
 
     func localFileURL(for episode: Episode) -> URL {
-        let safeName = episode.guid
+        localFileURL(forEpisodeGUID: episode.guid)
+    }
+
+    /// Destination path for a download. Uses only the GUID so a finished
+    /// background task can be saved after relaunch, when the Episode is gone.
+    func localFileURL(forEpisodeGUID guid: String) -> URL {
+        let safeName = guid
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
         return documentsDirectory().appendingPathComponent("download_\(safeName).mp3")
