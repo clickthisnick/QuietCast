@@ -68,7 +68,6 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 - **Search hours notice**: When search is unavailable (8 PM – 8 AM), a caption reads "Search is available between 8 AM and 8 PM."
 - **Resume last played**: When no episode is currently playing and a last-played episode exists on disk, a resume card appears above the podcast list showing the episode title, podcast name, saved position (e.g. "1h 23m in"), and a play button. Tapping it resumes from the saved position. The card disappears once playback starts.
 - **Downloaded episodes**: When at least one episode is downloaded, a "Downloaded" section appears at the top of the library list, above the resume card. It lists every downloaded episode across all podcasts. Each row shows the episode title, the podcast name, and progress from the saved playback position and played flag. When the episode duration and a saved position are both known, the row shows remaining time (e.g. "42m left" or "1h 5m left"). Otherwise it shows the saved position (e.g. "1h 23m in"), "Played", or "New". Under a minute is shown as "<1m". While that episode is the one loaded in `AudioPlayer` and the player knows its duration, the row shows remaining time from the player so it keeps up with playback. Tapping a row sets `currentFeedURL` to that podcast and calls `AudioPlayer.play`, which resumes from the saved position. Swiping left, including a full swipe, shows Remove and deletes only the offline file via `DownloadManager.removeDownload`. The podcast, the saved position, and the played flag stay. The section is hidden when nothing is downloaded. It updates when `downloadedGUIDs` changes — a download finishes, a download is removed, a podcast is deleted, or all data is cleared — and when the podcast list changes. Rows are built from each podcast's episode cache, in library order, then feed order. An episode appears after that podcast's episodes have been cached and the audio file is on disk. A saved position wins over the played flag, so a replayed episode shows remaining time instead of "Played".
-- **Storage diagnostics**: When the podcast list is empty, the empty state shows debug info (App Group availability, container ID, path, and library.json existence) in a quaternary caption to aid troubleshooting.
 - **Data cleared listener**: Resets podcast list when `QuietCastDataCleared` notification fires.
 - **Search availability polling**: Re-checks `TimeGate.searchAllowed()` every 30 seconds.
 
@@ -348,13 +347,13 @@ Organized into sections:
 struct Podcast: Codable, Identifiable, Equatable, Hashable {
     var id: String { feedURL }
     let title: String
-    let author: String
     let artworkURL: String
     let feedURL: String
 }
 ```
 - Identity based on `feedURL`.
 - `Hashable` conformance for `navigationDestination(item:)`.
+- Older `library.json` files may still contain an `author` key. Decoding ignores unknown keys, so those files still load.
 
 ### Episode
 ```swift

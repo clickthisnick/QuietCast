@@ -1,6 +1,5 @@
 import AVFoundation
 import Observation
-import os
 
 /// Handles spoken announcements via AVSpeechSynthesizer.
 @MainActor
@@ -10,7 +9,6 @@ final class SpeechAnnouncer {
 
     private let synthesizer = AVSpeechSynthesizer()
     private let delegate = SpeechAnnouncerDelegate()
-    private let logger = Logger(subsystem: "com.quietcast", category: "SpeechAnnouncer")
 
     /// Whether speech is currently active.
     private(set) var isSpeaking = false

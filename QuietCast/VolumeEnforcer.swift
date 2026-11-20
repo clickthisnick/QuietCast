@@ -1,7 +1,6 @@
 import AVFoundation
 import MediaPlayer
 import Observation
-import os
 
 /// Manages system volume enforcement: cap, floor, KVO observation, hidden MPVolumeView.
 @Observable
@@ -15,7 +14,6 @@ final class VolumeEnforcer {
     private var volumeView: MPVolumeView?
     private var volumeSlider: UISlider?
     private var volumeEnforcementTask: Task<Void, Never>?
-    private let logger = Logger(subsystem: "com.quietcast", category: "VolumeEnforcer")
 
     private init() {}
 

@@ -1,5 +1,4 @@
 import MediaPlayer
-import os
 
 /// Configures MPRemoteCommandCenter handlers and manages crown action state.
 @MainActor
@@ -14,8 +13,6 @@ final class RemoteCommandHandler {
     func cancelCrownAction() {
         isCrownActionActive = false
     }
-
-    private let logger = Logger(subsystem: "com.quietcast", category: "RemoteCommandHandler")
 
     private init() {}
 

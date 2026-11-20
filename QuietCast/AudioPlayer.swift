@@ -274,7 +274,7 @@ final class AudioPlayer {
         if savedPosition > 0 {
             startPosition = savedPosition
         } else {
-            startPosition = introSkipSeconds(for: episode)
+            startPosition = introSkipSeconds()
         }
 
         if startPosition > 0 {
@@ -633,9 +633,8 @@ final class AudioPlayer {
 
     // MARK: - Intro Skip
 
-    /// Returns the intro skip duration for the given episode's podcast, or the global default.
-    /// Returns 0 if no skip is configured.
-    private func introSkipSeconds(for episode: Episode) -> Double {
+    /// Intro skip for the current podcast, or the global default. Returns 0 when skip is off.
+    private func introSkipSeconds() -> Double {
         if let feedURL = feedURLForCurrentEpisode() {
             let library = PersistenceManager.shared.loadLibrary()
             if let custom = library.podcastSkipSeconds[feedURL] {

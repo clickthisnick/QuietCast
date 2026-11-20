@@ -149,21 +149,6 @@ struct LibraryView: View {
                     .multilineTextAlignment(.center)
             }
             Spacer()
-
-            // Debug: storage diagnostics
-            VStack(alignment: .leading, spacing: 4) {
-                let pm = PersistenceManager.shared
-                let dir = pm.documentsDirectory()
-                let groupAvailable = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: PersistenceManager.appGroupID) != nil
-                Text("App Group: \(groupAvailable ? "✓" : "✗ NOT AVAILABLE")")
-                Text("ID: \(PersistenceManager.appGroupID)")
-                Text("Path: \(dir.path)")
-                let fileExists = FileManager.default.fileExists(atPath: dir.appendingPathComponent("library.json").path)
-                Text("library.json: \(fileExists ? "exists" : "not found")")
-            }
-            .font(.caption2)
-            .foregroundStyle(.quaternary)
-            .padding()
         }
         .padding()
     }
@@ -437,7 +422,6 @@ struct LibraryView: View {
 
                 let podcast = Podcast(
                     title: title,
-                    author: "",
                     artworkURL: artwork,
                     feedURL: trimmed
                 )

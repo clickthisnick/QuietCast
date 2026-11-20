@@ -3,7 +3,6 @@ import Foundation
 struct Podcast: Codable, Identifiable, Equatable, Hashable {
     var id: String { feedURL }
     let title: String
-    let author: String
     let artworkURL: String
     let feedURL: String
 
