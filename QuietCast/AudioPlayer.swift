@@ -362,7 +362,10 @@ final class AudioPlayer {
 
     func skipForward() {
         guard let player else { return }
-        let target = min(currentTime + 30, duration)
+        // duration stays 0 until the item reports a real length. Clamping to it
+        // seeks back to 0:00, so skip from the current time while it is unknown.
+        let unclamped = currentTime + 30
+        let target = duration > 0 ? min(unclamped, duration) : unclamped
         currentTime = target
         isSeeking = true
         player.seek(to: CMTimeMakeWithSeconds(target, preferredTimescale: 600)) { [weak self] _ in
