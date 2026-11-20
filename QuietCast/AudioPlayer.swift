@@ -343,15 +343,19 @@ final class AudioPlayer {
     private func fadeIn(player: AVPlayer) {
         fadeInTask?.cancel()
         player.volume = 0
-        fadeInTask = Task { @MainActor in
+        let task = Task { @MainActor [weak self] in
             let steps = 15
             let interval = 1.5 / Double(steps)
             for i in 1...steps {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 if Task.isCancelled { return }
-                player.volume = min(Float(i) / Float(steps), self.maxVolume)
+                player.volume = min(Float(i) / Float(steps), self?.maxVolume ?? 1.0)
+            }
+            if !Task.isCancelled {
+                self?.fadeInTask = nil
             }
         }
+        fadeInTask = task
     }
 
     private var isSeeking = false
@@ -441,7 +445,11 @@ final class AudioPlayer {
         sleepTimerTask?.cancel()
         sleepTimerTask = nil
         sleepTimerRemaining = nil
-        player?.volume = maxVolume
+        // Arming auto-pause calls this immediately after fadeIn starts. Restoring
+        // max volume here cancels the fade. Leave the ramp alone while it is running.
+        if fadeInTask == nil {
+            player?.volume = maxVolume
+        }
     }
 
     // MARK: - Time Observer
