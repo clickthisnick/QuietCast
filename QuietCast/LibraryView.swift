@@ -375,33 +375,22 @@ struct LibraryView: View {
         Task {
             defer { isAddingFeed = false }
             do {
-                var request = URLRequest(url: url)
-                request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-                request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-                request.timeoutInterval = 15
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    addURLError = "Could not load feed. The server returned an error."
-                    showAddURL = true
-                    return
-                }
-                let parser = RSSParser(feedURL: trimmed)
-                let episodes = parser.parse(data: data)
-                if parser.parseFailed {
+                let feed = try await FeedService.load(feedURL: trimmed)
+                if feed.parseFailed {
                     addURLError = "Could not read this feed. Check the URL and try again."
                     showAddURL = true
                     return
                 }
-                if episodes.isEmpty {
+                if feed.episodes.isEmpty {
                     addURLError = "No episodes found. The feed may be empty or in an unsupported format."
                     showAddURL = true
                     return
                 }
 
-                let rawTitle = episodes.first?.podcastTitle
+                let rawTitle = feed.episodes.first?.podcastTitle
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 let title = rawTitle.isEmpty ? (url.host ?? "Unknown Podcast") : rawTitle
-                let artwork = episodes.first?.artworkURL ?? ""
+                let artwork = feed.episodes.first?.artworkURL ?? ""
 
                 // Check by title too — same podcast might have a different feed URL
                 if podcasts.contains(where: { $0.title.lowercased() == title.lowercased() }) {
@@ -420,8 +409,15 @@ struct LibraryView: View {
                 PersistenceManager.shared.update { library in
                     library.podcasts = podcasts
                 }
-            } catch let error as URLError where error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
-                addURLError = "No internet connection. Check your network and try again."
+            } catch let error as FeedError {
+                switch error {
+                case .offline:
+                    addURLError = "No internet connection. Check your network and try again."
+                case .httpStatus, .notHTTP:
+                    addURLError = "Could not load feed. The server returned an error."
+                case .invalidURL, .timedOut, .other:
+                    addURLError = "Could not load feed. Check the URL and try again."
+                }
                 showAddURL = true
             } catch {
                 addURLError = "Could not load feed. Check the URL and try again."

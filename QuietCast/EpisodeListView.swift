@@ -127,70 +127,51 @@ struct EpisodeListView: View {
     }
 
     private func fetchEpisodes() async {
-        guard let url = URL(string: podcast.feedURL) else {
-            if episodes.isEmpty {
-                errorMessage = "Invalid feed URL."
-            }
-            isLoading = false
-            return
-        }
-
+        defer { isLoading = false }
         do {
-            var request = URLRequest(url: url)
-            request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-            request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-            request.timeoutInterval = 15
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                if episodes.isEmpty {
-                    let code = (response as? HTTPURLResponse)?.statusCode
-                    if let code {
-                        errorMessage = "The feed server returned an error (\(code)). Pull to refresh to try again."
-                    } else {
-                        errorMessage = "The feed server returned an unexpected response. Pull to refresh to try again."
-                    }
-                }
-                isLoading = false
-                return
-            }
-
-            // Check if the server returned HTML instead of XML/RSS
-            if let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type"),
-               contentType.contains("text/html") {
+            let feed = try await FeedService.load(feedURL: podcast.feedURL)
+            if let contentType = feed.contentType, contentType.contains("text/html") {
                 if episodes.isEmpty {
                     errorMessage = "This URL returned a webpage, not an RSS feed."
                 }
-                isLoading = false
                 return
             }
-
-            let parser = RSSParser(feedURL: podcast.feedURL)
-            let parsed = parser.parse(data: data)
-            if !parsed.isEmpty {
-                episodes = parsed
+            if !feed.episodes.isEmpty {
+                episodes = feed.episodes
                 errorMessage = nil
-                PersistenceManager.shared.cacheEpisodes(parsed, for: podcast.feedURL)
+                PersistenceManager.shared.cacheEpisodes(feed.episodes, for: podcast.feedURL)
             } else if episodes.isEmpty {
                 errorMessage = "No episodes found. The feed may be empty or in an unsupported format."
             }
-        } catch {
-            // Only show error if we have no cached episodes to display
+        } catch FeedError.invalidURL {
             if episodes.isEmpty {
-                if let urlError = error as? URLError,
-                   urlError.code == .notConnectedToInternet || urlError.code == .networkConnectionLost {
-                    errorMessage = "No internet connection. Connect to a network and pull to refresh."
-                } else if let urlError = error as? URLError, urlError.code == .timedOut {
-                    errorMessage = "The request timed out. Pull to refresh to try again."
-                } else {
-                    errorMessage = error.localizedDescription
-                }
+                errorMessage = "Invalid feed URL."
             }
-            // If we have cached episodes, silently fail — user can pull to refresh
+        } catch FeedError.httpStatus(let code) {
+            if episodes.isEmpty {
+                errorMessage = "The feed server returned an error (\(code)). Pull to refresh to try again."
+            }
+        } catch FeedError.notHTTP {
+            if episodes.isEmpty {
+                errorMessage = "The feed server returned an unexpected response. Pull to refresh to try again."
+            }
+        } catch FeedError.offline {
+            if episodes.isEmpty {
+                errorMessage = "No internet connection. Connect to a network and pull to refresh."
+            }
+        } catch FeedError.timedOut {
+            if episodes.isEmpty {
+                errorMessage = "The request timed out. Pull to refresh to try again."
+            }
+        } catch FeedError.other(let message) {
+            if episodes.isEmpty {
+                errorMessage = message
+            }
+        } catch {
+            if episodes.isEmpty {
+                errorMessage = error.localizedDescription
+            }
         }
-        isLoading = false
     }
 }
 

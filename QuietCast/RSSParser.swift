@@ -185,3 +185,60 @@ final class RSSParser: NSObject, XMLParserDelegate {
         return (raw, nil)
     }
 }
+
+enum FeedError: Error {
+    case invalidURL
+    case offline
+    case timedOut
+    case notHTTP
+    case httpStatus(Int)
+    case other(String)
+}
+
+struct LoadedFeed {
+    let episodes: [Episode]
+    let parseFailed: Bool
+    /// Content-Type header, when the server sent one.
+    let contentType: String?
+}
+
+/// Shared feed download used by add-by-URL and the episode list refresh.
+enum FeedService {
+    static func load(feedURL: String) async throws -> LoadedFeed {
+        guard let url = URL(string: feedURL), url.scheme != nil else {
+            throw FeedError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError where error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
+            throw FeedError.offline
+        } catch let error as URLError where error.code == .timedOut {
+            throw FeedError.timedOut
+        } catch {
+            throw FeedError.other(error.localizedDescription)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw FeedError.notHTTP
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw FeedError.httpStatus(http.statusCode)
+        }
+
+        let parser = RSSParser(feedURL: feedURL)
+        let episodes = parser.parse(data: data)
+        return LoadedFeed(
+            episodes: episodes,
+            parseFailed: parser.parseFailed,
+            contentType: http.value(forHTTPHeaderField: "Content-Type")
+        )
+    }
+}

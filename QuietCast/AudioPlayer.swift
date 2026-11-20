@@ -15,31 +15,9 @@ final class AudioPlayer {
     var playbackError: String?
     var currentTime: Double = 0
     var duration: Double = 0
-    var playbackRate: Float = 1.0
     var sleepTimerRemaining: Double? = nil // seconds remaining, nil = off
     var sleepTimerActive: Bool { sleepTimerRemaining != nil }
-    var autoPlayNext = true
     var isScrubbing = false
-    var maxVolume: Float = 1.0 // 0.0–1.0, caps player output
-    var noiseCancellationOn: Bool = false
-    var systemVolumeCapNC: Float = 1.0
-    var systemVolumeFloorNC: Float = 0.0
-    var systemVolumeCapNoNC: Float = 1.0
-    var systemVolumeFloorNoNC: Float = 0.0
-    var systemVolumeCapEnabled: Bool = false
-    var volumeRangeAlwaysOn: Bool = false
-    var volumeRangeAutoReenableMinutes: Int = 120
-    var volumeRangeReenableAt: Date?
-
-    /// Active cap based on current NC mode.
-    var systemVolumeCap: Float {
-        noiseCancellationOn ? systemVolumeCapNC : systemVolumeCapNoNC
-    }
-
-    /// Active floor based on current NC mode.
-    var systemVolumeFloor: Float {
-        noiseCancellationOn ? systemVolumeFloorNC : systemVolumeFloorNoNC
-    }
     var currentSystemVolume: Float { VolumeEnforcer.shared.currentSystemVolume }
 
     /// The episode list for auto-play next; set when loading a podcast's episodes
@@ -63,75 +41,26 @@ final class AudioPlayer {
     private var fadeInTask: Task<Void, Never>?
 
     private init() {
-        autoPlayNext = AppSettings.autoPlayNext
-        maxVolume = AppSettings.maxVolume
-        playbackRate = AppSettings.playbackRate
-        noiseCancellationOn = AppSettings.noiseCancellationOn
-        systemVolumeCapNC = AppSettings.systemVolumeCapNC
-        systemVolumeFloorNC = AppSettings.systemVolumeFloorNC
-        systemVolumeCapNoNC = AppSettings.systemVolumeCapNoNC
-        systemVolumeFloorNoNC = AppSettings.systemVolumeFloorNoNC
-        systemVolumeCapEnabled = AppSettings.systemVolumeCapEnabled
-        volumeRangeAlwaysOn = AppSettings.volumeRangeAlwaysOn
-        volumeRangeAutoReenableMinutes = AppSettings.volumeRangeAutoReenableMinutes
-        volumeRangeReenableAt = AppSettings.volumeRangeReenableAt
         observeInterruptions()
         observeRouteChanges()
     }
 
-    func setMaxVolume(_ value: Float) {
-        maxVolume = value
-        AppSettings.maxVolume = value
+    /// Caps in-app volume while audio is playing. Called when the volume limit changes.
+    func clampOutputToMaxVolume() {
+        guard isPlaying else { return }
+        player?.volume = min(player?.volume ?? 1.0, AppSettings.maxVolume)
+    }
+
+    func applyPlaybackRate() {
         if isPlaying {
-            player?.volume = min(player?.volume ?? 1.0, maxVolume)
+            player?.rate = AppSettings.playbackRate
         }
+        updateNowPlaying()
     }
 
-    func setSystemVolumeCapNC(_ value: Float) {
-        systemVolumeCapNC = value
-        AppSettings.systemVolumeCapNC = value
-        if noiseCancellationOn && systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeCap()
-        }
-    }
-
-    func setSystemVolumeFloorNC(_ value: Float) {
-        systemVolumeFloorNC = value
-        AppSettings.systemVolumeFloorNC = value
-        if noiseCancellationOn && systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeFloor()
-        }
-    }
-
-    func setSystemVolumeCapNoNC(_ value: Float) {
-        systemVolumeCapNoNC = value
-        AppSettings.systemVolumeCapNoNC = value
-        if !noiseCancellationOn && systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeCap()
-        }
-    }
-
-    func setSystemVolumeFloorNoNC(_ value: Float) {
-        systemVolumeFloorNoNC = value
-        AppSettings.systemVolumeFloorNoNC = value
-        if !noiseCancellationOn && systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeFloor()
-        }
-    }
-
-    func setNoiseCancellation(_ on: Bool) {
-        noiseCancellationOn = on
-        AppSettings.noiseCancellationOn = on
-        if systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeCap()
-            VolumeEnforcer.shared.enforceSystemVolumeFloor()
-        }
-    }
-
-    func setSystemVolumeCapEnabled(_ enabled: Bool) {
-        systemVolumeCapEnabled = enabled
-        AppSettings.systemVolumeCapEnabled = enabled
-        if enabled {
+    /// Lock Volume Range was toggled. Enforce, or arm the auto re-enable timer.
+    func systemVolumeLockChanged() {
+        if AppSettings.systemVolumeCapEnabled {
             cancelVolumeRangeReenable()
             VolumeEnforcer.shared.enforceSystemVolumeCap()
         } else {
@@ -139,40 +68,22 @@ final class AudioPlayer {
         }
     }
 
-    func setVolumeRangeAlwaysOn(_ enabled: Bool) {
-        volumeRangeAlwaysOn = enabled
-        AppSettings.volumeRangeAlwaysOn = enabled
-        if enabled && systemVolumeCapEnabled {
-            VolumeEnforcer.shared.enforceSystemVolumeCap()
-            VolumeEnforcer.shared.enforceSystemVolumeFloor()
-        }
-    }
-
-    func setVolumeRangeAutoReenableMinutes(_ minutes: Int) {
-        volumeRangeAutoReenableMinutes = minutes
-        AppSettings.volumeRangeAutoReenableMinutes = minutes
-        if !systemVolumeCapEnabled {
-            scheduleVolumeRangeReenableIfNeeded()
-        }
-    }
-
     /// If a re-enable was scheduled and its time has passed, turn Lock Volume Range back on.
     func checkVolumeRangeReenableSchedule() {
-        guard !systemVolumeCapEnabled,
-              let scheduled = volumeRangeReenableAt,
+        guard !AppSettings.systemVolumeCapEnabled,
+              let scheduled = AppSettings.volumeRangeReenableAt,
               scheduled <= Date() else { return }
-        setSystemVolumeCapEnabled(true)
+        AppSettings.systemVolumeCapEnabled = true
     }
 
-    private func scheduleVolumeRangeReenableIfNeeded() {
-        let minutes = volumeRangeAutoReenableMinutes
+    func scheduleVolumeRangeReenableIfNeeded() {
+        let minutes = AppSettings.volumeRangeAutoReenableMinutes
         guard minutes > 0 else {
             cancelVolumeRangeReenable()
             return
         }
 
         let reenableDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
-        volumeRangeReenableAt = reenableDate
         AppSettings.volumeRangeReenableAt = reenableDate
 
         reenableTask?.cancel()
@@ -187,7 +98,6 @@ final class AudioPlayer {
     private func cancelVolumeRangeReenable() {
         reenableTask?.cancel()
         reenableTask = nil
-        volumeRangeReenableAt = nil
         AppSettings.volumeRangeReenableAt = nil
     }
 
@@ -257,7 +167,7 @@ final class AudioPlayer {
         currentEpisode = episode
         isPlaying = true
         isBuffering = true
-        if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+        if AppSettings.systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
         addEndOfEpisodeObserver(for: item)
         observeBufferingStatus()
 
@@ -292,13 +202,13 @@ final class AudioPlayer {
 
     /// Resume the AVPlayer at the current playback rate (used by speech announcements).
     func resumePlayback() {
-        player?.rate = playbackRate
+        player?.rate = AppSettings.playbackRate
         armAutoPauseTimerIfNeeded()
     }
 
     /// Resume the AVPlayer without resetting the sleep timer.
     func resumePlaybackWithoutResettingTimer() {
-        player?.rate = playbackRate
+        player?.rate = AppSettings.playbackRate
     }
 
     func togglePlayPause() {
@@ -322,9 +232,9 @@ final class AudioPlayer {
         if let player {
             fadeIn(player: player)
         }
-        player?.rate = playbackRate
+        player?.rate = AppSettings.playbackRate
         isPlaying = true
-        if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+        if AppSettings.systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
         updateNowPlaying()
         if armTimer { armAutoPauseTimerIfNeeded() }
     }
@@ -341,11 +251,6 @@ final class AudioPlayer {
 
     // MARK: - Volume
 
-    func setAutoPlayNext(_ enabled: Bool) {
-        autoPlayNext = enabled
-        AppSettings.autoPlayNext = enabled
-    }
-
     /// Gentle 1.5-second fade-in
     private func fadeIn(player: AVPlayer) {
         fadeInTask?.cancel()
@@ -356,7 +261,7 @@ final class AudioPlayer {
             for i in 1...steps {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 if Task.isCancelled { return }
-                player.volume = min(Float(i) / Float(steps), self?.maxVolume ?? 1.0)
+                player.volume = min(Float(i) / Float(steps), AppSettings.maxVolume)
             }
             if !Task.isCancelled {
                 self?.fadeInTask = nil
@@ -391,15 +296,6 @@ final class AudioPlayer {
         updateNowPlaying()
     }
 
-    func setRate(_ rate: Float) {
-        playbackRate = rate
-        AppSettings.playbackRate = rate
-        if isPlaying {
-            player?.rate = rate
-        }
-        updateNowPlaying()
-    }
-
     // MARK: - Sleep Timer
 
     /// Auto-Pause: arms (or restarts) the timer whenever playback starts or resumes.
@@ -421,11 +317,11 @@ final class AudioPlayer {
 
                 // Fade volume in last 30 seconds: from maxVolume down to 0
                 if remaining <= 30 {
-                    self.player?.volume = self.maxVolume * Float(remaining / 30.0)
+                    self.player?.volume = AppSettings.maxVolume * Float(remaining / 30.0)
                 }
 
                 if remaining <= 1 {
-                    self.player?.volume = self.maxVolume
+                    self.player?.volume = AppSettings.maxVolume
                     self.pause()
                     self.sleepTimerRemaining = nil
                     return
@@ -441,7 +337,7 @@ final class AudioPlayer {
         // Arming auto-pause calls this immediately after fadeIn starts. Restoring
         // max volume here cancels the fade. Leave the ramp alone while it is running.
         if fadeInTask == nil {
-            player?.volume = maxVolume
+            player?.volume = AppSettings.maxVolume
         }
     }
 
@@ -490,12 +386,12 @@ final class AudioPlayer {
             player.seek(to: CMTimeMakeWithSeconds(position, preferredTimescale: 600)) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self, let player = self.player else { return }
-                    player.rate = self.playbackRate
+                    player.rate = AppSettings.playbackRate
                     self.fadeIn(player: player)
                 }
             }
         } else {
-            player.rate = playbackRate
+            player.rate = AppSettings.playbackRate
             fadeIn(player: player)
         }
     }
@@ -535,7 +431,7 @@ final class AudioPlayer {
         }
 
         // Auto-play next episode
-        if autoPlayNext, let finished = finishedEpisode,
+        if AppSettings.autoPlayNext, let finished = finishedEpisode,
            let currentIndex = episodeList.firstIndex(where: { $0.guid == finished.guid }),
            currentIndex + 1 < episodeList.count {
             let nextEpisode = episodeList[currentIndex + 1]
@@ -666,7 +562,7 @@ final class AudioPlayer {
         info[MPMediaItemPropertyArtist] = currentEpisode?.podcastTitle ?? ""
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? playbackRate : 0.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? AppSettings.playbackRate : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
@@ -693,7 +589,7 @@ final class AudioPlayer {
                     let rawOptions = (userInfo[AVAudioSessionInterruptionOptionKey] as? NSNumber)?.uintValue ?? 0
                     let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
                     if options.contains(.shouldResume), self.currentEpisode != nil {
-                        self.player?.rate = self.playbackRate
+                        self.player?.rate = AppSettings.playbackRate
                         self.isPlaying = true
                         self.updateNowPlaying()
                         self.armAutoPauseTimerIfNeeded()

@@ -63,7 +63,7 @@ struct QuietCastApp: App {
 
                 // Enforce system volume range on app open when the lock is on.
                 // VolumeEnforcer applies the nighttime / always-on check itself.
-                if AudioPlayer.shared.systemVolumeCapEnabled {
+                if AppSettings.systemVolumeCapEnabled {
                     let enforcer = VolumeEnforcer.shared
                     enforcer.installVolumeView()
                     // Small delay to let the volume view attach

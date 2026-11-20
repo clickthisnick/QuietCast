@@ -86,14 +86,14 @@ struct NowPlayingBar: View {
     private var transportControls: some View {
         HStack(spacing: 20) {
             // Noise cancellation toggle
-            if audioPlayer.systemVolumeCapEnabled {
+            if AppSettings.systemVolumeCapEnabled {
                 Button {
-                    audioPlayer.setNoiseCancellation(!audioPlayer.noiseCancellationOn)
+                    AppSettings.noiseCancellationOn = !AppSettings.noiseCancellationOn
                 } label: {
-                    Image(systemName: audioPlayer.noiseCancellationOn ? "ear.fill" : "ear")
+                    Image(systemName: AppSettings.noiseCancellationOn ? "ear.fill" : "ear")
                         .font(.title3)
                         .frame(minWidth: 44, minHeight: 44)
-                        .foregroundStyle(audioPlayer.noiseCancellationOn ? Color.warmAccent : .secondary)
+                        .foregroundStyle(AppSettings.noiseCancellationOn ? Color.warmAccent : .secondary)
                 }
             }
 
@@ -166,18 +166,18 @@ struct NowPlayingBar: View {
             Menu {
                 ForEach(rates, id: \.self) { rate in
                     Button {
-                        audioPlayer.setRate(rate)
+                        AppSettings.playbackRate = rate
                     } label: {
                         HStack {
                             Text(formatRate(rate))
-                            if audioPlayer.playbackRate == rate {
+                            if AppSettings.playbackRate == rate {
                                 Image(systemName: "checkmark")
                             }
                         }
                     }
                 }
             } label: {
-                Text(formatRate(audioPlayer.playbackRate))
+                Text(formatRate(AppSettings.playbackRate))
                     .font(.caption)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)

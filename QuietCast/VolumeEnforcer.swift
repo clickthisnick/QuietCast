@@ -48,10 +48,10 @@ final class VolumeEnforcer {
         currentSystemVolume = session.outputVolume
         volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] _, change in
             let newVolume = change.newValue ?? session.outputVolume
-            let capEnabled = AppSettings.systemVolumeCapEnabled
-            let cap = AppSettings.systemVolumeCap
-            let floor = AppSettings.systemVolumeFloor
             Task { @MainActor [weak self] in
+                let capEnabled = AppSettings.systemVolumeCapEnabled
+                let cap = AppSettings.systemVolumeCap
+                let floor = AppSettings.systemVolumeFloor
                 if capEnabled && Self.shouldEnforce {
                     if newVolume > cap {
                         self?.volumeSlider?.value = cap

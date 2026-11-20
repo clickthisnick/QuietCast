@@ -38,11 +38,11 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 | `VolumeEnforcer.swift` | System volume cap/floor enforcement via hidden `MPVolumeView`, KVO observation, rapid polling. `@Observable`, so Settings can show the live system volume. Reads mode-aware cap/floor from `AppSettings`. |
 | `SpeechAnnouncer.swift` | Spoken announcements via `AVSpeechSynthesizer` with best-voice selection. |
 | `RemoteCommandHandler.swift` | `MPRemoteCommandCenter` setup, crown action mutex, random episode and speak-time logic. |
-| `AppSettings.swift` | Centralized `UserDefaults` access, in `QuietCast/AppSettings.swift`. All keys and defaults in one place. |
+| `AppSettings.swift` | The only preference store, in `QuietCast/AppSettings.swift`. `@Observable` singleton `AppSettings.shared`, backed by the shared UserDefaults suite. Same keys as before. Views read it directly. |
 | `silence.wav` | 0.1-second silent audio clip used to claim Now Playing session on launch. |
 | `DownloadManager.swift` | Background download management with progress tracking. |
 | `PersistenceManager.swift` | JSON-based persistence for library, episode cache, playback positions, played status, last-played episode, per-podcast skip durations. |
-| `RSSParser.swift` | XML parser for podcast RSS feeds. Computes `pubDateTimestamp` at parse time. |
+| `RSSParser.swift` | XML parser for podcast RSS feeds. Computes `pubDateTimestamp` at parse time. `FeedService.load` fetches a feed for add-by-URL and episode refresh. |
 | `iTunesSearchService.swift` | iTunes Search API client. |
 | `HTMLCleaner.swift` | Strips HTML tags, URLs, and entities from episode descriptions. |
 | `Models.swift` | `Podcast` and `Episode` data models. |
@@ -224,11 +224,11 @@ Three layers of volume control, each serving a different purpose:
 ### 13. Downloads
 
 - **Background session**: `URLSessionConfiguration.background` with identifier `com.quietcast.downloads`. `sessionSendsLaunchEvents` is true. `QuietCastApp` creates the session at launch. If iOS relaunches the app for the transfer, `QuietCastAppDelegate` passes the system completion handler to `DownloadManager` before the session is recreated, and `urlSessionDidFinishEvents` calls that handler after the library is flushed.
-- **Task identity**: `taskDescription` stores the episode GUID. Background sessions keep that string across relaunch, when the in-memory task maps are empty. Completion uses it to find the destination file.
+- **Task identity**: `taskDescription` stores the episode GUID. Background sessions keep that string across relaunch. The destination path is `localFileURL(forEpisodeGUID:)`. A task that is still in memory but has no description is matched by the task object. A finished download with no GUID at all is not saved.
 - **HTTP**: Only a 2xx response is saved. Any other status, or a missing HTTP response, is discarded and not written as audio.
-- **Progress tracking**: Per-episode progress (0–1) in `activeDownloads` dictionary. Progress callbacks fall back to `taskDescription` when the in-memory map has no entry.
+- **Progress tracking**: Per-episode progress (0–1) in `activeDownloads`. The callback reads the GUID from `taskDescription`, and falls back to the in-memory task only when that string is missing.
 - **File storage**: Downloaded episodes saved as `download_{sanitized_guid}.mp3` in the App Group container (`group.com.quietcast.shared`), falling back to the app Documents directory when that container is unavailable. Each file is marked `isExcludedFromBackup` (existing files are marked again when `DownloadManager` starts) so episode audio is left out of iCloud backup.
-- **Temp files**: The system download is moved to the final path before the delegate returns. If the GUID is unknown, the file is parked in `tmp/quietcast-incoming` and deleted once it still cannot be matched. That directory is swept on the next launch.
+- **Temp files**: When the GUID is known, the system download is moved to the final path before the delegate returns. If the GUID is not on the task, the file is parked in `tmp/quietcast-incoming` and deleted once it still cannot be matched to an in-memory task. That directory is swept on the next launch.
 - **Download states**: Not downloaded → Downloading (with progress) → Downloaded.
 - **Cancel**: Cancels active task, removes partial file, cleans up tracking state.
 - **Remove**: Deletes local file, removes from `downloadedGUIDs`, saves state. The library's Downloaded section calls this on swipe-to-delete. Playback position and played status are left as they are.
@@ -390,7 +390,7 @@ struct LibraryData: Codable {
 
 ## UserDefaults Keys (via `AppSettings`)
 
-All `UserDefaults` access is centralized through the `AppSettings` enum using the shared App Group suite (`group.com.quietcast.shared`). No other file reads or writes `UserDefaults` directly.
+All `UserDefaults` access is centralized through `AppSettings.shared` using the shared App Group suite (`group.com.quietcast.shared`). No other file reads or writes `UserDefaults` directly. A missing key still uses the default in the table. Audio playback does not keep a second copy of these values.
 
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
