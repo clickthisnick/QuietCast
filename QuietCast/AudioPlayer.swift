@@ -11,6 +11,8 @@ final class AudioPlayer {
     var currentEpisode: Episode?
     var isPlaying = false
     var isBuffering = false
+    /// Set when the current item fails to play. Cleared on the next play attempt.
+    var playbackError: String?
     var currentTime: Double = 0
     var duration: Double = 0
     var playbackRate: Float = 1.0
@@ -55,6 +57,9 @@ final class AudioPlayer {
     private var sleepTimerTask: Task<Void, Never>?
     private var reenableTask: Task<Void, Never>?
     private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+    private var itemStatusObservation: NSKeyValueObservation?
+    private var failedToEndObserver: NSObjectProtocol?
     private var fadeInTask: Task<Void, Never>?
 
     private init() {
@@ -71,6 +76,7 @@ final class AudioPlayer {
         volumeRangeAutoReenableMinutes = AppSettings.volumeRangeAutoReenableMinutes
         volumeRangeReenableAt = AppSettings.volumeRangeReenableAt
         observeInterruptions()
+        observeRouteChanges()
     }
 
     func setMaxVolume(_ value: Float) {
@@ -226,6 +232,7 @@ final class AudioPlayer {
     }
 
     func play(episode: Episode, rearmAutoPause: Bool = true) {
+        playbackError = nil
         let url: URL
         let persistence = PersistenceManager.shared
         if persistence.isDownloaded(episode) {
@@ -250,7 +257,7 @@ final class AudioPlayer {
 
         removeTimeObserver()
         removeEndOfEpisodeObserver()
-        statusObservation?.invalidate()
+        clearItemObservations()
         let item = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: item)
         player?.volume = 0
@@ -343,22 +350,29 @@ final class AudioPlayer {
     private func fadeIn(player: AVPlayer) {
         fadeInTask?.cancel()
         player.volume = 0
-        fadeInTask = Task { @MainActor in
+        let task = Task { @MainActor [weak self] in
             let steps = 15
             let interval = 1.5 / Double(steps)
             for i in 1...steps {
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 if Task.isCancelled { return }
-                player.volume = min(Float(i) / Float(steps), self.maxVolume)
+                player.volume = min(Float(i) / Float(steps), self?.maxVolume ?? 1.0)
+            }
+            if !Task.isCancelled {
+                self?.fadeInTask = nil
             }
         }
+        fadeInTask = task
     }
 
     private var isSeeking = false
 
     func skipForward() {
         guard let player else { return }
-        let target = min(currentTime + 30, duration)
+        // duration stays 0 until the item reports a real length. Clamping to it
+        // seeks back to 0:00, so skip from the current time while it is unknown.
+        let unclamped = currentTime + 30
+        let target = duration > 0 ? min(unclamped, duration) : unclamped
         currentTime = target
         isSeeking = true
         player.seek(to: CMTimeMakeWithSeconds(target, preferredTimescale: 600)) { [weak self] _ in
@@ -441,7 +455,11 @@ final class AudioPlayer {
         sleepTimerTask?.cancel()
         sleepTimerTask = nil
         sleepTimerRemaining = nil
-        player?.volume = maxVolume
+        // Arming auto-pause calls this immediately after fadeIn starts. Restoring
+        // max volume here cancels the fade. Leave the ramp alone while it is running.
+        if fadeInTask == nil {
+            player?.volume = maxVolume
+        }
     }
 
     // MARK: - Time Observer
@@ -517,8 +535,7 @@ final class AudioPlayer {
             let nextEpisode = episodeList[currentIndex + 1]
             removeTimeObserver()
             removeEndOfEpisodeObserver()
-            statusObservation?.invalidate()
-            statusObservation = nil
+            clearItemObservations()
             currentEpisode = nil
             player = nil
             play(episode: nextEpisode, rearmAutoPause: false)
@@ -531,8 +548,7 @@ final class AudioPlayer {
         duration = 0
         removeTimeObserver()
         removeEndOfEpisodeObserver()
-        statusObservation?.invalidate()
-        statusObservation = nil
+        clearItemObservations()
         currentEpisode = nil
         player = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -548,6 +564,57 @@ final class AudioPlayer {
                 self.isBuffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
             }
         }
+
+        itemStatusObservation?.invalidate()
+        if let failedToEndObserver {
+            NotificationCenter.default.removeObserver(failedToEndObserver)
+            self.failedToEndObserver = nil
+        }
+        guard let item = player?.currentItem else { return }
+
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard item.status == .failed else { return }
+            let message = item.error?.localizedDescription
+            Task { @MainActor [weak self] in
+                self?.handlePlaybackFailure(message)
+            }
+        }
+        failedToEndObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification,
+            object: item,
+            queue: .main
+        ) { [weak self] notification in
+            let message = (notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error)?.localizedDescription
+            Task { @MainActor [weak self] in
+                self?.handlePlaybackFailure(message)
+            }
+        }
+    }
+
+    private func clearItemObservations() {
+        statusObservation?.invalidate()
+        statusObservation = nil
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = nil
+        if let failedToEndObserver {
+            NotificationCenter.default.removeObserver(failedToEndObserver)
+            self.failedToEndObserver = nil
+        }
+    }
+
+    private func handlePlaybackFailure(_ message: String?) {
+        guard currentEpisode != nil else { return }
+        isBuffering = false
+        isPlaying = false
+        player?.pause()
+        if playbackError == nil {
+            if let message, !message.isEmpty {
+                playbackError = message
+            } else {
+                playbackError = "This episode couldn't be played."
+            }
+        }
+        updateNowPlaying()
     }
 
     // MARK: - Position Persistence
@@ -635,6 +702,29 @@ final class AudioPlayer {
                 @unknown default:
                     break
                 }
+            }
+        }
+    }
+
+    /// Headphones unplugged (or another output removed). iOS pauses playback;
+    /// keep the transport in sync so it doesn't stay on the pause icon.
+    private func observeRouteChanges() {
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let userInfo = notification.userInfo,
+                      let rawReason = (userInfo[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue,
+                      let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason),
+                      reason == .oldDeviceUnavailable,
+                      self.currentEpisode != nil else { return }
+                self.isPlaying = false
+                self.isBuffering = false
+                self.player?.pause()
+                self.updateNowPlaying()
             }
         }
     }

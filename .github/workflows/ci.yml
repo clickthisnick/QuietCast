@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: iOS
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test when an Xcode project is present
+        timeout-minutes: 35
+        run: |
+          set -euo pipefail
+
+          project="$(find . -name '*.xcodeproj' -not -path '*/.*' -print | awk '{ n=gsub(/\//,"/") } n < depth || best == "" { depth=n; best=$0 } END { print best }')"
+          if [[ -z "${project}" ]]; then
+            echo "::notice::No .xcodeproj found; skipping xcodebuild."
+            exit 0
+          fi
+
+          scheme="$(xcodebuild -project "${project}" -list -json | python3 -c 'import json,sys; raw=sys.stdin.read(); start=raw.find("{"); data=json.loads(raw[start:] if start>=0 else "{}"); schemes=data.get("project",{}).get("schemes") or []; print(schemes[0] if schemes else "")')"
+          if [[ -z "${scheme}" ]]; then
+            scheme="$(basename "${project}" .xcodeproj)"
+          fi
+          echo "Project: ${project}"
+          echo "Scheme: ${scheme}"
+
+          # Newest iOS runtime, then a plain iPhone rather than Pro/Max/Plus/SE/mini.
+          udid="$(xcrun simctl list devices available -j | python3 -c 'import json,re,sys; data=json.load(sys.stdin); groups={runtime: phones for runtime, devices in data.get("devices",{}).items() if "iOS" in runtime and (phones:=[(d.get("name") or "", d.get("udid") or "") for d in devices if d.get("isAvailable") and (d.get("name") or "").startswith("iPhone") and d.get("udid")])}; sys.exit("No available iPhone simulator") if not groups else None; runtime=max(groups, key=lambda item: [int(n) for n in re.findall(r"\d+", item)]); phones=groups[runtime]; plain=[phone for phone in phones if all(token not in phone[0] for token in ("Pro","Max","Plus","SE","mini"))]; name,chosen=(plain or phones)[0]; print("Using simulator %s (%s)" % (name, runtime), file=sys.stderr); print(chosen)')"
+
+          derived="${RUNNER_TEMP}/DerivedData"
+          result="${RUNNER_TEMP}/TestResults.xcresult"
+          mkdir -p "${derived}"
+          rm -rf "${result}"
+
+          common=(
+            -project "${project}"
+            -scheme "${scheme}"
+            -destination "platform=iOS Simulator,id=${udid}"
+            -derivedDataPath "${derived}"
+            CODE_SIGNING_ALLOWED=NO
+            ONLY_ACTIVE_ARCH=YES
+            COMPILER_INDEX_STORE_ENABLE=NO
+          )
+
+          xcodebuild build-for-testing "${common[@]}" -resultBundlePath "${result}"
+          rm -rf "${result}"
+          xcodebuild test-without-building "${common[@]}" -resultBundlePath "${result}"
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        timeout-minutes: 5
+        with:
+          name: xcresult
+          path: ${{ runner.temp }}/TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # hashFiles() is not available in a job-level if. This cheap job is the gate.
+  package-check:
+    name: Check for Package.swift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_package: ${{ steps.look.outputs.has_package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Look for a root package manifest
+        id: look
+        timeout-minutes: 2
+        run: |
+          if [[ -f Package.swift ]]; then
+            echo "has_package=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_package=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Package.swift; skipping Swift package tests."
+          fi
+
+  linux:
+    name: Swift package
+    needs: package-check
+    if: needs.package-check.outputs.has_package == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.0-jammy
+    steps:
+      - name: Install git
+        timeout-minutes: 5
+        run: apt-get update && apt-get install -y git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test
+        timeout-minutes: 15
+        run: swift test

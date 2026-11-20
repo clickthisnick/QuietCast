@@ -31,8 +31,10 @@ struct LibraryData: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        podcasts = try container.decode([Podcast].self, forKey: .podcasts)
-        downloadedEpisodeGUIDs = try container.decode(Set<String>.self, forKey: .downloadedEpisodeGUIDs)
+        // Missing keys are treated as empty so an older library.json still loads.
+        // A present key with the wrong type still throws and is backed up.
+        podcasts = try container.decodeIfPresent([Podcast].self, forKey: .podcasts) ?? []
+        downloadedEpisodeGUIDs = try container.decodeIfPresent(Set<String>.self, forKey: .downloadedEpisodeGUIDs) ?? []
         playbackPositions = try container.decodeIfPresent([String: Double].self, forKey: .playbackPositions) ?? [:]
         playedEpisodeGUIDs = try container.decodeIfPresent(Set<String>.self, forKey: .playedEpisodeGUIDs) ?? []
         lastPlayedEpisodeGUID = try container.decodeIfPresent(String.self, forKey: .lastPlayedEpisodeGUID)
@@ -52,6 +54,9 @@ final class PersistenceManager {
     /// In-memory cache — avoids repeated disk reads
     private var cachedLibrary: LibraryData?
     private var saveTask: Task<Void, Never>?
+    /// True when library.json could not be decoded and could not be moved aside.
+    /// Writes stay off so a later save cannot replace the unread file with an empty one.
+    private var blockOverwrite = false
 
     private var libraryFileURL: URL {
         documentsDirectory().appendingPathComponent("library.json")
@@ -75,9 +80,39 @@ final class PersistenceManager {
             return library
         } catch {
             logger.error("Failed to decode library.json: \(error.localizedDescription)")
+            if backupCorruptLibrary(at: url) {
+                blockOverwrite = false
+            } else {
+                blockOverwrite = true
+                logger.error("library.json was left in place. Saves are blocked so it is not overwritten.")
+            }
             let empty = LibraryData(podcasts: [], downloadedEpisodeGUIDs: [])
             cachedLibrary = empty
             return empty
+        }
+    }
+
+    /// Move an unreadable library.json to `library.json.corrupt-<date>` so a later save cannot destroy it.
+    private func backupCorruptLibrary(at url: URL) -> Bool {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let stamp = formatter.string(from: Date())
+        let directory = url.deletingLastPathComponent()
+        var destination = directory.appendingPathComponent("library.json.corrupt-\(stamp)")
+        var attempt = 1
+        while fileManager.fileExists(atPath: destination.path) {
+            destination = directory.appendingPathComponent("library.json.corrupt-\(stamp)-\(attempt)")
+            attempt += 1
+        }
+        do {
+            try fileManager.moveItem(at: url, to: destination)
+            logger.error("Moved unreadable library.json to \(destination.lastPathComponent)")
+            return true
+        } catch {
+            logger.error("Could not back up library.json: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -103,6 +138,10 @@ final class PersistenceManager {
     }
 
     private func writeToDisk() {
+        guard !blockOverwrite else {
+            logger.error("Refusing to overwrite library.json after a decode failure that could not be backed up.")
+            return
+        }
         guard let library = cachedLibrary else { return }
         do {
             let data = try JSONEncoder().encode(library)
@@ -121,7 +160,13 @@ final class PersistenceManager {
     }
 
     func localFileURL(for episode: Episode) -> URL {
-        let safeName = episode.guid
+        localFileURL(forEpisodeGUID: episode.guid)
+    }
+
+    /// Destination path for a download. Uses only the GUID so a finished
+    /// background task can be saved after relaunch, when the Episode is gone.
+    func localFileURL(forEpisodeGUID guid: String) -> URL {
+        let safeName = guid
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
         return documentsDirectory().appendingPathComponent("download_\(safeName).mp3")
@@ -129,6 +174,26 @@ final class PersistenceManager {
 
     func isDownloaded(_ episode: Episode) -> Bool {
         fileManager.fileExists(atPath: localFileURL(for: episode).path)
+    }
+
+    /// Keep downloaded audio out of iCloud backup. The files are large and can be fetched again.
+    func excludeFromBackup(url: URL) {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutable = url
+        do {
+            try mutable.setResourceValues(values)
+        } catch {
+            logger.error("Failed to exclude \(url.lastPathComponent) from backup: \(error.localizedDescription)")
+        }
+    }
+
+    func excludeExistingDownloadsFromBackup() {
+        let docs = documentsDirectory()
+        guard let files = try? fileManager.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix("download_") {
+            excludeFromBackup(url: file)
+        }
     }
 
     func savePlaybackPosition(_ seconds: Double, for guid: String) {
@@ -244,6 +309,7 @@ final class PersistenceManager {
     }
 
     func clearAllData() {
+        blockOverwrite = false
         cachedLibrary = nil
         saveTask?.cancel()
 

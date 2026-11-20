@@ -9,6 +9,12 @@ final class RemoteCommandHandler {
     /// Prevents concurrent crown actions (double-press and triple-press).
     private(set) var isCrownActionActive = false
 
+    /// Release the crown mutex without running the speech completion.
+    /// Used when speech is stopped and that completion is discarded.
+    func cancelCrownAction() {
+        isCrownActionActive = false
+    }
+
     private let logger = Logger(subsystem: "com.quietcast", category: "RemoteCommandHandler")
 
     private init() {}

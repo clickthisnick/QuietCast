@@ -11,11 +11,16 @@ import UIKit
 
 @main
 struct QuietCastApp: App {
+    @UIApplicationDelegateAdaptor(QuietCastAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var previousBrightness: CGFloat?
     @State private var hasSetupAudioSession = false
 
     init() {
+        // Recreate the background download session on every launch so a transfer
+        // that finished while the app was gone can be moved into place.
+        _ = DownloadManager.shared
+
         // Flush saves on app termination (not always called, but helps when it is)
         NotificationCenter.default.addObserver(
             forName: UIApplication.willTerminateNotification,
@@ -84,6 +89,25 @@ struct QuietCastApp: App {
             @unknown default:
                 break
             }
+        }
+    }
+}
+
+/// Receives background URLSession relaunch events for episode downloads.
+final class QuietCastAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard identifier == "com.quietcast.downloads" else {
+            completionHandler()
+            return
+        }
+        // UIKit calls this on the main thread. The session has to exist
+        // before we return or the system drops the events.
+        MainActor.assumeIsolated {
+            DownloadManager.connectBackgroundSession(completionHandler)
         }
     }
 }
