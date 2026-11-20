@@ -323,19 +323,25 @@ final class AudioPlayer {
     func togglePlayPause() {
         if isPlaying {
             pause()
-        } else if currentEpisode != nil {
-            if let player {
-                fadeIn(player: player)
-            }
-            player?.rate = playbackRate
-            isPlaying = true
-            if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
-            updateNowPlaying()
-            // Preserve any in-flight countdown (manual sleep timer or auto-pause).
-            // Only arm a fresh timer when no countdown is active.
-            if sleepTimerRemaining == nil {
-                armAutoPauseTimerIfNeeded()
-            }
+        } else {
+            play()
+        }
+    }
+
+    /// Headset play. Does not pause when audio is already playing.
+    func play() {
+        guard !isPlaying, currentEpisode != nil else { return }
+        if let player {
+            fadeIn(player: player)
+        }
+        player?.rate = playbackRate
+        isPlaying = true
+        if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+        updateNowPlaying()
+        // Preserve any in-flight countdown (manual sleep timer or auto-pause).
+        // Only arm a fresh timer when no countdown is active.
+        if sleepTimerRemaining == nil {
+            armAutoPauseTimerIfNeeded()
         }
     }
 

@@ -123,7 +123,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 
 ### 5. Remote Commands (Lock Screen & Headphones)
 
-- **Play/Pause**: Standard play, pause, and toggle commands.
+- **Play/Pause**: Standard play, pause, and toggle commands. Play starts or resumes and does not pause audio that is already playing. Pause only pauses. Toggle still switches.
 - **Skip forward/back**: 30-second skip in both directions.
 - **Next track (double-press crown)**: Pauses current audio, speaks the podcast name and episode title, then plays the random episode. Uses `nextTrackCommand`. Only draws from podcasts selected in Settings.
 - **Previous track (triple-press crown)**: Pauses current audio, speaks the current time aloud (e.g., "The time is 11:42 PM"), then resumes playback at the current playback rate. Uses `previousTrackCommand`.

@@ -18,57 +18,41 @@ final class RemoteCommandHandler {
 
     func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-
-        center.playCommand.addTarget { _ in
-            Task { @MainActor in
-                AudioPlayer.shared.togglePlayPause()
-            }
-            return .success
-        }
-
-        center.pauseCommand.addTarget { _ in
-            Task { @MainActor in
-                AudioPlayer.shared.pause()
-            }
-            return .success
-        }
-
-        center.togglePlayPauseCommand.addTarget { _ in
-            Task { @MainActor in
-                AudioPlayer.shared.togglePlayPause()
-            }
-            return .success
-        }
-
         let skipInterval = NSNumber(value: AppSettings.skipIntervalSeconds)
-        center.skipForwardCommand.preferredIntervals = [skipInterval]
-        center.skipForwardCommand.addTarget { _ in
-            Task { @MainActor in
-                AudioPlayer.shared.skipForward()
-            }
-            return .success
+
+        addCommand(center.playCommand) {
+            AudioPlayer.shared.play()
+        }
+        addCommand(center.pauseCommand) {
+            AudioPlayer.shared.pause()
+        }
+        addCommand(center.togglePlayPauseCommand) {
+            AudioPlayer.shared.togglePlayPause()
         }
 
+        center.skipForwardCommand.preferredIntervals = [skipInterval]
+        addCommand(center.skipForwardCommand) {
+            AudioPlayer.shared.skipForward()
+        }
         center.skipBackwardCommand.preferredIntervals = [skipInterval]
-        center.skipBackwardCommand.addTarget { _ in
-            Task { @MainActor in
-                AudioPlayer.shared.skipBackward()
-            }
-            return .success
+        addCommand(center.skipBackwardCommand) {
+            AudioPlayer.shared.skipBackward()
         }
 
         // Double-press crown/AirPods plays a random old episode
-        center.nextTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.playRandomOldEpisode()
-            }
-            return .success
+        addCommand(center.nextTrackCommand) { [weak self] in
+            self?.playRandomOldEpisode()
         }
-
         // Triple-press crown/AirPods speaks the current time
-        center.previousTrackCommand.addTarget { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.speakCurrentTime()
+        addCommand(center.previousTrackCommand) { [weak self] in
+            self?.speakCurrentTime()
+        }
+    }
+
+    private func addCommand(_ command: MPRemoteCommand, action: @escaping @MainActor () -> Void) {
+        command.addTarget { _ in
+            Task { @MainActor in
+                action()
             }
             return .success
         }
