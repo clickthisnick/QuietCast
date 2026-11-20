@@ -62,14 +62,11 @@ final class RemoteCommandHandler {
     func speakCurrentTime() {
         guard !isCrownActionActive else { return }
         isCrownActionActive = true
-        let wasPlaying = AudioPlayer.shared.isPlaying
-        if wasPlaying { AudioPlayer.shared.pausePlayback() }
-
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         let timeString = formatter.string(from: Date())
-        SpeechAnnouncer.shared.speak("The time is \(timeString)") { [weak self] in
+        AudioPlayer.shared.pauseThenSpeak("The time is \(timeString)") { [weak self] wasPlaying in
             Task { @MainActor [weak self] in
                 self?.isCrownActionActive = false
                 if wasPlaying { AudioPlayer.shared.resumePlayback() }
@@ -82,8 +79,6 @@ final class RemoteCommandHandler {
         guard !isCrownActionActive else { return }
         isCrownActionActive = true
         let ageDays = AppSettings.randomEpisodeAgeDays
-        let cutoff = Calendar.current.date(byAdding: .day, value: -ageDays, to: Date()) ?? Date()
-        let cutoffTimestamp = cutoff.timeIntervalSince1970
         let excludedFeedURLs = Set(AppSettings.randomExcludedFeedURLs)
 
         let persistence = PersistenceManager.shared
@@ -108,11 +103,7 @@ final class RemoteCommandHandler {
         while !rotation.isEmpty {
             let feedURL = rotation.removeFirst()
             guard let episodes = persistence.cachedEpisodes(for: feedURL) else { continue }
-            let eligible = episodes.filter { episode in
-                guard let timestamp = episode.pubDateTimestamp else { return true }
-                return timestamp < cutoffTimestamp
-            }
-            if let episode = eligible.randomElement() {
+            if let episode = episodes.olderThan(days: ageDays).randomElement() {
                 selectedEpisode = episode
                 selectedFeedURL = feedURL
                 break
@@ -127,9 +118,7 @@ final class RemoteCommandHandler {
             isCrownActionActive = false
             return
         }
-        let wasPlaying = AudioPlayer.shared.isPlaying
-        if wasPlaying { AudioPlayer.shared.pausePlayback() }
-        SpeechAnnouncer.shared.speak("\(random.podcastTitle). \(random.title)") { [weak self] in
+        AudioPlayer.shared.pauseThenSpeak("\(random.podcastTitle). \(random.title)") { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.isCrownActionActive = false
                 AudioPlayer.shared.currentFeedURL = selectedFeedURL

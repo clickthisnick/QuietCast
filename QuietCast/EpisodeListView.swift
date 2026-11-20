@@ -114,19 +114,7 @@ struct EpisodeListView: View {
     private func playRandomOldEpisode() {
         // Stop any text-to-speech before starting audio
         SpeechAnnouncer.shared.stop()
-
-        let ageDays = AppSettings.randomEpisodeAgeDays
-        let cutoff = Calendar.current.date(byAdding: .day, value: -ageDays, to: Date()) ?? Date()
-        let cutoffTimestamp = cutoff.timeIntervalSince1970
-
-        let eligible = episodes.filter { episode in
-            guard let timestamp = episode.pubDateTimestamp else {
-                // If we can't parse the date, include it (likely an old episode with unusual format)
-                return true
-            }
-            return timestamp < cutoffTimestamp
-        }
-
+        let eligible = episodes.olderThan(days: AppSettings.randomEpisodeAgeDays)
         if let random = eligible.randomElement() {
             audioPlayer.play(episode: random)
         }
@@ -396,12 +384,7 @@ struct EpisodeRow: View {
         }
 
         // Pause playback so the announcement is audible.
-        let wasPlaying = audioPlayer.isPlaying
-        if wasPlaying {
-            audioPlayer.pausePlayback()
-        }
-
-        announcer.speak(text, identifier: episode.guid) {
+        audioPlayer.pauseThenSpeak(text, identifier: episode.guid) { wasPlaying in
             if wasPlaying {
                 self.audioPlayer.resumePlayback()
             }

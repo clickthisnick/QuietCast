@@ -32,3 +32,15 @@ struct Episode: Codable, Identifiable, Equatable {
         lhs.guid == rhs.guid
     }
 }
+
+extension Array where Element == Episode {
+    /// Episodes older than `days`. Episodes with no publication date are included.
+    func olderThan(days: Int, now: Date = Date()) -> [Episode] {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+        let cutoffTimestamp = cutoff.timeIntervalSince1970
+        return filter { episode in
+            guard let timestamp = episode.pubDateTimestamp else { return true }
+            return timestamp < cutoffTimestamp
+        }
+    }
+}

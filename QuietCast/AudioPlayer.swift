@@ -242,22 +242,15 @@ final class AudioPlayer {
             url = streamURL
         }
 
-        if currentEpisode?.guid == episode.guid, let player {
-            fadeIn(player: player)
-            player.rate = playbackRate
-            isPlaying = true
-            if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
-            updateNowPlaying()
-            if rearmAutoPause { armAutoPauseTimerIfNeeded() }
+        if currentEpisode?.guid == episode.guid, player != nil {
+            resumeCurrentEpisode(armTimer: rearmAutoPause)
             return
         }
 
         // Save position of the episode we're leaving
         saveCurrentPosition()
 
-        removeTimeObserver()
-        removeEndOfEpisodeObserver()
-        clearItemObservations()
+        tearDownCurrentItem()
         let item = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: item)
         player?.volume = 0
@@ -277,19 +270,7 @@ final class AudioPlayer {
             startPosition = introSkipSeconds()
         }
 
-        if startPosition > 0 {
-            player?.seek(to: CMTimeMakeWithSeconds(startPosition, preferredTimescale: 600)) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self, let player = self.player else { return }
-                    player.rate = self.playbackRate
-                    self.fadeIn(player: player)
-                }
-            }
-        } else {
-            player?.rate = playbackRate
-            if let player { fadeIn(player: player) }
-        }
-
+        beginAudiblePlayback(at: startPosition)
         addTimeObserver()
         updateNowPlaying()
         if rearmAutoPause {
@@ -331,6 +312,13 @@ final class AudioPlayer {
     /// Headset play. Does not pause when audio is already playing.
     func play() {
         guard !isPlaying, currentEpisode != nil else { return }
+        // Preserve any in-flight countdown (manual sleep timer or auto-pause).
+        // Only arm a fresh timer when no countdown is active.
+        resumeCurrentEpisode(armTimer: sleepTimerRemaining == nil)
+    }
+
+    /// Fade in the loaded episode, mark it playing, and optionally arm auto-pause.
+    private func resumeCurrentEpisode(armTimer: Bool) {
         if let player {
             fadeIn(player: player)
         }
@@ -338,10 +326,16 @@ final class AudioPlayer {
         isPlaying = true
         if systemVolumeCapEnabled { VolumeEnforcer.shared.enforceSystemVolumeCap() }
         updateNowPlaying()
-        // Preserve any in-flight countdown (manual sleep timer or auto-pause).
-        // Only arm a fresh timer when no countdown is active.
-        if sleepTimerRemaining == nil {
-            armAutoPauseTimerIfNeeded()
+        if armTimer { armAutoPauseTimerIfNeeded() }
+    }
+
+    /// Pause for speech, then run `completion` with whether audio was playing.
+    /// Callers that touch player state hop back to the main actor themselves.
+    func pauseThenSpeak(_ text: String, identifier: String? = nil, completion: @escaping (_ wasPlaying: Bool) -> Void) {
+        let wasPlaying = isPlaying
+        if wasPlaying { pausePlayback() }
+        SpeechAnnouncer.shared.speak(text, identifier: identifier) {
+            completion(wasPlaying)
         }
     }
 
@@ -374,32 +368,15 @@ final class AudioPlayer {
     private var isSeeking = false
 
     func skipForward() {
-        guard let player else { return }
         // duration stays 0 until the item reports a real length. Clamping to it
         // seeks back to 0:00, so skip from the current time while it is unknown.
         let unclamped = currentTime + Double(AppSettings.skipIntervalSeconds)
         let target = duration > 0 ? min(unclamped, duration) : unclamped
-        currentTime = target
-        isSeeking = true
-        player.seek(to: CMTimeMakeWithSeconds(target, preferredTimescale: 600)) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.isSeeking = false
-            }
-        }
-        updateNowPlaying()
+        seek(to: target)
     }
 
     func skipBackward() {
-        guard let player else { return }
-        let target = max(currentTime - Double(AppSettings.skipIntervalSeconds), 0)
-        currentTime = target
-        isSeeking = true
-        player.seek(to: CMTimeMakeWithSeconds(target, preferredTimescale: 600)) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.isSeeking = false
-            }
-        }
-        updateNowPlaying()
+        seek(to: max(currentTime - Double(AppSettings.skipIntervalSeconds), 0))
     }
 
     func seek(to time: Double) {
@@ -500,6 +477,29 @@ final class AudioPlayer {
         }
     }
 
+    private func tearDownCurrentItem() {
+        removeTimeObserver()
+        removeEndOfEpisodeObserver()
+        clearItemObservations()
+    }
+
+    /// Start audible playback immediately, or after seeking to a saved position.
+    private func beginAudiblePlayback(at position: Double) {
+        guard let player else { return }
+        if position > 0 {
+            player.seek(to: CMTimeMakeWithSeconds(position, preferredTimescale: 600)) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, let player = self.player else { return }
+                    player.rate = self.playbackRate
+                    self.fadeIn(player: player)
+                }
+            }
+        } else {
+            player.rate = playbackRate
+            fadeIn(player: player)
+        }
+    }
+
     // MARK: - End of Episode
 
     private func addEndOfEpisodeObserver(for item: AVPlayerItem) {
@@ -539,9 +539,7 @@ final class AudioPlayer {
            let currentIndex = episodeList.firstIndex(where: { $0.guid == finished.guid }),
            currentIndex + 1 < episodeList.count {
             let nextEpisode = episodeList[currentIndex + 1]
-            removeTimeObserver()
-            removeEndOfEpisodeObserver()
-            clearItemObservations()
+            tearDownCurrentItem()
             currentEpisode = nil
             player = nil
             play(episode: nextEpisode, rearmAutoPause: false)
@@ -552,9 +550,7 @@ final class AudioPlayer {
         isBuffering = false
         currentTime = 0
         duration = 0
-        removeTimeObserver()
-        removeEndOfEpisodeObserver()
-        clearItemObservations()
+        tearDownCurrentItem()
         currentEpisode = nil
         player = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil

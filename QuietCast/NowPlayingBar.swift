@@ -218,12 +218,7 @@ struct NowPlayingBar: View {
         }
 
         // Remember whether the podcast was playing, so we only resume if it was
-        let wasPlaying = audioPlayer.isPlaying
-        if wasPlaying {
-            audioPlayer.pausePlayback()
-        }
-
-        SpeechAnnouncer.shared.speak("Sleep timer: \(formatRemainingForSpeech(remaining)).") {
+        audioPlayer.pauseThenSpeak("Sleep timer: \(formatRemainingForSpeech(remaining)).") { wasPlaying in
             if wasPlaying {
                 audioPlayer.resumePlaybackWithoutResettingTimer()
             }
