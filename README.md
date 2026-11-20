@@ -10,7 +10,8 @@ Application source lives in `QuietCast/`:
 - `AppSettings.swift` — UserDefaults keys and defaults
 - `Assets.xcassets`, `Info.plist`, and `QuietCast.entitlements`
 - `silence.wav` — silent clip used to claim the Now Playing session
-- `requirements.md` — feature specification
+
+`requirements.md` at the repository root is the feature specification. It sits outside the app target.
 
 Shared data uses the App Group `group.com.quietcast.shared`, with a fallback to the app Documents directory when that container is unavailable.
 
