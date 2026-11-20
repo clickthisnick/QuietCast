@@ -42,7 +42,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 | `silence.wav` | 0.1-second silent audio clip used to claim Now Playing session on launch. |
 | `DownloadManager.swift` | Background download management with progress tracking. |
 | `PersistenceManager.swift` | JSON-based persistence for library, episode cache, playback positions, played status, last-played episode, per-podcast skip durations. |
-| `RSSParser.swift` | XML parser for podcast RSS feeds. Computes `pubDateTimestamp` at parse time. |
+| `RSSParser.swift` | XML parser for podcast RSS feeds. Computes `pubDateTimestamp` at parse time. `FeedService.load` fetches a feed for add-by-URL and episode refresh. |
 | `iTunesSearchService.swift` | iTunes Search API client. |
 | `HTMLCleaner.swift` | Strips HTML tags, URLs, and entities from episode descriptions. |
 | `Models.swift` | `Podcast` and `Episode` data models. |
