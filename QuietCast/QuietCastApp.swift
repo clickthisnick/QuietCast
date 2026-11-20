@@ -19,6 +19,7 @@ struct QuietCastApp: App {
         // Recreate the background download session on every launch so a transfer
         // that finished while the app was gone can be moved into place.
         _ = DownloadManager.shared
+        AppSettings.shared.connectPlaybackReactions()
 
         // Flush saves on app termination (not always called, but helps when it is)
         NotificationCenter.default.addObserver(

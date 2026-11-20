@@ -624,3 +624,16 @@ final class AudioPlayer {
         }
     }
 }
+
+extension AppSettings {
+    /// Point preference changes at playback and the system volume cap.
+    /// Called once at launch. The closures run only after a setting actually changes.
+    func connectPlaybackReactions() {
+        reactions.clampOutputVolume = { AudioPlayer.shared.clampOutputToMaxVolume() }
+        reactions.applyPlaybackRate = { AudioPlayer.shared.applyPlaybackRate() }
+        reactions.enforceSystemVolumeCap = { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+        reactions.enforceSystemVolumeFloor = { VolumeEnforcer.shared.enforceSystemVolumeFloor() }
+        reactions.systemVolumeLockChanged = { AudioPlayer.shared.systemVolumeLockChanged() }
+        reactions.scheduleVolumeRangeReenable = { AudioPlayer.shared.scheduleVolumeRangeReenableIfNeeded() }
+    }
+}

@@ -387,9 +387,7 @@ struct LibraryView: View {
                     return
                 }
 
-                let rawTitle = feed.episodes.first?.podcastTitle
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                let title = rawTitle.isEmpty ? (url.host ?? "Unknown Podcast") : rawTitle
+                let title = FeedService.podcastTitle(from: feed.episodes, feedURL: url)
                 let artwork = feed.episodes.first?.artworkURL ?? ""
 
                 // Check by title too — same podcast might have a different feed URL
@@ -554,13 +552,7 @@ private struct DownloadedEpisodeRow: View {
     }
 
     private static func formatSpan(_ seconds: Double) -> String {
-        guard seconds.isFinite else { return "<1m" }
-        // Keep the conversion inside Int's range. Episode lengths are far smaller.
-        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
-        if bounded < 60 {
-            return "<1m"
-        }
-        return AppSettings.hoursMinutes(bounded)
+        AppSettings.progressSpan(seconds)
     }
 }
 

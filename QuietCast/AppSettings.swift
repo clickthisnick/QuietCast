@@ -5,8 +5,6 @@ import Observation
 /// UserDefaults keys as before so values saved by older builds still load.
 @Observable
 final class AppSettings {
-    static let shared = AppSettings()
-
     /// The user-facing app name. Change this single value to rename the app everywhere.
     static let appName = "QuietCast"
 
@@ -29,7 +27,29 @@ final class AppSettings {
         return "\(minutes)m"
     }
 
-    private static let defaults = UserDefaults(suiteName: PersistenceManager.appGroupID) ?? .standard
+    /// Downloaded-row progress. Under a minute is "<1m"; otherwise the same hours-and-minutes text.
+    static func progressSpan(_ seconds: Double) -> String {
+        guard seconds.isFinite else { return "<1m" }
+        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
+        if bounded < 60 {
+            return "<1m"
+        }
+        return hoursMinutes(bounded)
+    }
+
+    private let defaults: UserDefaults
+
+    /// Playback and volume reactions. The app installs these at launch. Tests leave them empty.
+    struct Reactions {
+        var clampOutputVolume: () -> Void = {}
+        var applyPlaybackRate: () -> Void = {}
+        var enforceSystemVolumeCap: () -> Void = {}
+        var enforceSystemVolumeFloor: () -> Void = {}
+        var systemVolumeLockChanged: () -> Void = {}
+        var scheduleVolumeRangeReenable: () -> Void = {}
+    }
+
+    var reactions = Reactions()
 
     /// False while `init` is copying stored values in. `didSet` must not write or enforce yet.
     private var isReady = false
@@ -53,25 +73,30 @@ final class AppSettings {
         static let autoPauseMinutes = "autoPauseMinutes"
     }
 
-    private init() {
-        autoPlayNext = Self.storedBool(Key.autoPlayNext, default: true)
-        maxVolume = Self.storedFloat(Key.maxVolume, default: 1.0)
-        autoPauseMinutes = Self.storedInt(Key.autoPauseMinutes, default: 120)
-        noiseCancellationOn = Self.defaults.bool(forKey: Key.noiseCancellationOn)
-        systemVolumeCapNC = Self.storedFloat(Key.systemVolumeCapNC, default: 0.20)
-        systemVolumeFloorNC = Self.storedFloat(Key.systemVolumeFloorNC, default: 0.10)
-        systemVolumeCapNoNC = Self.storedFloat(Key.systemVolumeCapNoNC, default: 0.14)
-        systemVolumeFloorNoNC = Self.storedFloat(Key.systemVolumeFloorNoNC, default: 0.09)
-        systemVolumeCapEnabled = Self.storedBool(Key.systemVolumeCapEnabled, default: true)
-        randomEpisodeAgeDays = Self.storedInt(Key.randomEpisodeAgeDays, default: 60)
-        randomExcludedFeedURLs = Self.defaults.stringArray(forKey: Key.randomExcludedFeedURLs) ?? []
-        playbackRate = Self.storedFloat(Key.playbackRate, default: 1.0)
-        defaultSkipIntroSeconds = Self.storedInt(Key.defaultSkipIntroSeconds, default: 0)
-        volumeRangeAlwaysOn = Self.storedBool(Key.volumeRangeAlwaysOn, default: true)
-        volumeRangeAutoReenableMinutes = Self.storedInt(Key.volumeRangeAutoReenableMinutes, default: 120)
-        volumeRangeReenableAt = Self.defaults.object(forKey: Key.volumeRangeReenableAt) as? Date
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        autoPlayNext = Self.storedBool(defaults, Key.autoPlayNext, default: true)
+        maxVolume = Self.storedFloat(defaults, Key.maxVolume, default: 1.0)
+        autoPauseMinutes = Self.storedInt(defaults, Key.autoPauseMinutes, default: 120)
+        noiseCancellationOn = defaults.bool(forKey: Key.noiseCancellationOn)
+        systemVolumeCapNC = Self.storedFloat(defaults, Key.systemVolumeCapNC, default: 0.20)
+        systemVolumeFloorNC = Self.storedFloat(defaults, Key.systemVolumeFloorNC, default: 0.10)
+        systemVolumeCapNoNC = Self.storedFloat(defaults, Key.systemVolumeCapNoNC, default: 0.14)
+        systemVolumeFloorNoNC = Self.storedFloat(defaults, Key.systemVolumeFloorNoNC, default: 0.09)
+        systemVolumeCapEnabled = Self.storedBool(defaults, Key.systemVolumeCapEnabled, default: true)
+        randomEpisodeAgeDays = Self.storedInt(defaults, Key.randomEpisodeAgeDays, default: 60)
+        randomExcludedFeedURLs = defaults.stringArray(forKey: Key.randomExcludedFeedURLs) ?? []
+        playbackRate = Self.storedFloat(defaults, Key.playbackRate, default: 1.0)
+        defaultSkipIntroSeconds = Self.storedInt(defaults, Key.defaultSkipIntroSeconds, default: 0)
+        volumeRangeAlwaysOn = Self.storedBool(defaults, Key.volumeRangeAlwaysOn, default: true)
+        volumeRangeAutoReenableMinutes = Self.storedInt(defaults, Key.volumeRangeAutoReenableMinutes, default: 120)
+        volumeRangeReenableAt = defaults.object(forKey: Key.volumeRangeReenableAt) as? Date
         isReady = true
     }
+
+    static let shared = AppSettings(
+        defaults: UserDefaults(suiteName: PersistenceManager.appGroupID) ?? .standard
+    )
 
     // MARK: - Playback
 
@@ -82,7 +107,7 @@ final class AppSettings {
     var maxVolume: Float = 1.0 {
         didSet {
             guard store(maxVolume, key: Key.maxVolume) else { return }
-            onMain { AudioPlayer.shared.clampOutputToMaxVolume() }
+            onMain { [weak self] in self?.reactions.clampOutputVolume() }
         }
     }
 
@@ -94,7 +119,7 @@ final class AppSettings {
     var playbackRate: Float = 1.0 {
         didSet {
             guard store(playbackRate, key: Key.playbackRate) else { return }
-            onMain { AudioPlayer.shared.applyPlaybackRate() }
+            onMain { [weak self] in self?.reactions.applyPlaybackRate() }
         }
     }
 
@@ -109,9 +134,9 @@ final class AppSettings {
         didSet {
             guard store(noiseCancellationOn, key: Key.noiseCancellationOn) else { return }
             guard systemVolumeCapEnabled else { return }
-            onMain {
-                VolumeEnforcer.shared.enforceSystemVolumeCap()
-                VolumeEnforcer.shared.enforceSystemVolumeFloor()
+            onMain { [weak self] in
+                self?.reactions.enforceSystemVolumeCap()
+                self?.reactions.enforceSystemVolumeFloor()
             }
         }
     }
@@ -120,7 +145,7 @@ final class AppSettings {
         didSet {
             guard store(systemVolumeCapNC, key: Key.systemVolumeCapNC) else { return }
             guard noiseCancellationOn && systemVolumeCapEnabled else { return }
-            onMain { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+            onMain { [weak self] in self?.reactions.enforceSystemVolumeCap() }
         }
     }
 
@@ -128,7 +153,7 @@ final class AppSettings {
         didSet {
             guard store(systemVolumeFloorNC, key: Key.systemVolumeFloorNC) else { return }
             guard noiseCancellationOn && systemVolumeCapEnabled else { return }
-            onMain { VolumeEnforcer.shared.enforceSystemVolumeFloor() }
+            onMain { [weak self] in self?.reactions.enforceSystemVolumeFloor() }
         }
     }
 
@@ -136,7 +161,7 @@ final class AppSettings {
         didSet {
             guard store(systemVolumeCapNoNC, key: Key.systemVolumeCapNoNC) else { return }
             guard !noiseCancellationOn && systemVolumeCapEnabled else { return }
-            onMain { VolumeEnforcer.shared.enforceSystemVolumeCap() }
+            onMain { [weak self] in self?.reactions.enforceSystemVolumeCap() }
         }
     }
 
@@ -144,7 +169,7 @@ final class AppSettings {
         didSet {
             guard store(systemVolumeFloorNoNC, key: Key.systemVolumeFloorNoNC) else { return }
             guard !noiseCancellationOn && systemVolumeCapEnabled else { return }
-            onMain { VolumeEnforcer.shared.enforceSystemVolumeFloor() }
+            onMain { [weak self] in self?.reactions.enforceSystemVolumeFloor() }
         }
     }
 
@@ -161,7 +186,7 @@ final class AppSettings {
     var systemVolumeCapEnabled: Bool = true {
         didSet {
             guard store(systemVolumeCapEnabled, key: Key.systemVolumeCapEnabled) else { return }
-            onMain { AudioPlayer.shared.systemVolumeLockChanged() }
+            onMain { [weak self] in self?.reactions.systemVolumeLockChanged() }
         }
     }
 
@@ -169,9 +194,9 @@ final class AppSettings {
         didSet {
             guard store(volumeRangeAlwaysOn, key: Key.volumeRangeAlwaysOn) else { return }
             guard volumeRangeAlwaysOn && systemVolumeCapEnabled else { return }
-            onMain {
-                VolumeEnforcer.shared.enforceSystemVolumeCap()
-                VolumeEnforcer.shared.enforceSystemVolumeFloor()
+            onMain { [weak self] in
+                self?.reactions.enforceSystemVolumeCap()
+                self?.reactions.enforceSystemVolumeFloor()
             }
         }
     }
@@ -181,7 +206,7 @@ final class AppSettings {
         didSet {
             guard store(volumeRangeAutoReenableMinutes, key: Key.volumeRangeAutoReenableMinutes) else { return }
             guard !systemVolumeCapEnabled else { return }
-            onMain { AudioPlayer.shared.scheduleVolumeRangeReenableIfNeeded() }
+            onMain { [weak self] in self?.reactions.scheduleVolumeRangeReenable() }
         }
     }
 
@@ -190,9 +215,9 @@ final class AppSettings {
         didSet {
             guard isReady else { return }
             if let volumeRangeReenableAt {
-                Self.defaults.set(volumeRangeReenableAt, forKey: Key.volumeRangeReenableAt)
+                defaults.set(volumeRangeReenableAt, forKey: Key.volumeRangeReenableAt)
             } else {
-                Self.defaults.removeObject(forKey: Key.volumeRangeReenableAt)
+                defaults.removeObject(forKey: Key.volumeRangeReenableAt)
             }
         }
     }
@@ -278,43 +303,43 @@ final class AppSettings {
 
     // MARK: - Persistence
 
-    private static func storedBool(_ key: String, default defaultValue: Bool) -> Bool {
+    private static func storedBool(_ defaults: UserDefaults, _ key: String, default defaultValue: Bool) -> Bool {
         defaults.object(forKey: key) as? Bool ?? defaultValue
     }
 
-    private static func storedFloat(_ key: String, default defaultValue: Float) -> Float {
+    private static func storedFloat(_ defaults: UserDefaults, _ key: String, default defaultValue: Float) -> Float {
         defaults.object(forKey: key) as? Float ?? defaultValue
     }
 
-    private static func storedInt(_ key: String, default defaultValue: Int) -> Int {
+    private static func storedInt(_ defaults: UserDefaults, _ key: String, default defaultValue: Int) -> Int {
         defaults.object(forKey: key) as? Int ?? defaultValue
     }
 
     @discardableResult
     private func store(_ value: Bool, key: String) -> Bool {
         guard isReady else { return false }
-        Self.defaults.set(value, forKey: key)
+        defaults.set(value, forKey: key)
         return true
     }
 
     @discardableResult
     private func store(_ value: Float, key: String) -> Bool {
         guard isReady else { return false }
-        Self.defaults.set(value, forKey: key)
+        defaults.set(value, forKey: key)
         return true
     }
 
     @discardableResult
     private func store(_ value: Int, key: String) -> Bool {
         guard isReady else { return false }
-        Self.defaults.set(value, forKey: key)
+        defaults.set(value, forKey: key)
         return true
     }
 
     @discardableResult
     private func store(_ value: [String], key: String) -> Bool {
         guard isReady else { return false }
-        Self.defaults.set(value, forKey: key)
+        defaults.set(value, forKey: key)
         return true
     }
 

@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build and test when an Xcode project is present
         timeout-minutes: 35
@@ -70,7 +70,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         timeout-minutes: 5
         with:
           name: xcresult
@@ -87,7 +87,7 @@ jobs:
       has_package: ${{ steps.look.outputs.has_package }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Look for a root package manifest
         id: look
@@ -113,7 +113,7 @@ jobs:
         run: apt-get update && apt-get install -y git
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Test
         timeout-minutes: 15
