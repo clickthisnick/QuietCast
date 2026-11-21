@@ -13,7 +13,7 @@ test:
 	$(SWIFT) test --enable-code-coverage
 
 coverage:
-	bash scripts/coverage_floor.sh $(COVERAGE_FLOOR)
+	sh scripts/coverage_floor.sh $(COVERAGE_FLOOR)
 
 format:
 	$(SWIFT) format lint --recursive --strict --configuration .swift-format QuietCast QuietCastTests Package.swift
@@ -25,4 +25,4 @@ workflows:
 	actionlint
 
 size:
-	bash scripts/size_budget.sh $(SIZE_BUDGET)
+	sh scripts/size_budget.sh $(SIZE_BUDGET)
