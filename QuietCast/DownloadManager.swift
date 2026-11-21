@@ -7,7 +7,7 @@ import os
 final class DownloadManager {
     static let shared = DownloadManager()
 
-    var activeDownloads: [String: Double] = [:] // guid -> progress 0..1
+    var activeDownloads: [String: Double] = [:]  // guid -> progress 0..1
     var downloadedGUIDs: Set<String> = []
 
     /// In-flight tasks, so a download can be cancelled. The GUID also lives on `taskDescription`.
@@ -144,7 +144,8 @@ final class DownloadManager {
                 guard let self else { return }
                 for task in tasks {
                     guard let guid = Self.normalizedGUID(task.taskDescription),
-                          let downloadTask = task as? URLSessionDownloadTask else { continue }
+                        let downloadTask = task as? URLSessionDownloadTask
+                    else { continue }
                     self.guidToTask[guid] = downloadTask
                     if self.activeDownloads[guid] == nil {
                         self.activeDownloads[guid] = 0
@@ -171,10 +172,12 @@ final class DownloadManager {
     /// final path before the delegate returns, so anything still here is unusable.
     private static func sweepIncomingDirectory() {
         let directory = incomingDirectory()
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        ) else { return }
+        guard
+            let files = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+        else { return }
         for file in files {
             try? FileManager.default.removeItem(at: file)
         }
@@ -243,7 +246,8 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
                 try? FileManager.default.removeItem(at: tempCopy)
             }
             guard let manager = self.manager,
-                  let guid = manager.guid(for: downloadTask) else {
+                let guid = manager.guid(for: downloadTask)
+            else {
                 removeTemp()
                 self.logger.error("Download finished with no episode id; deleted temp file")
                 return

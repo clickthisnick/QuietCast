@@ -29,21 +29,21 @@ final class HTMLCleanerTests: XCTestCase {
 
 final class DurationFormatTests: XCTestCase {
     func testHoursAndMinutes() {
-        XCTAssertEqual(AppSettings.hoursMinutes(3723), "1h 2m")
-        XCTAssertEqual(AppSettings.hoursMinutes(3600), "1h 0m")
-        XCTAssertEqual(AppSettings.hoursMinutes(90), "1m")
-        XCTAssertEqual(AppSettings.hoursMinutes(59), "0m")
-        XCTAssertEqual(AppSettings.hoursMinutes(0), "0m")
-        XCTAssertEqual(AppSettings.hoursMinutes(.nan), "0m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(3723), "1h 2m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(3600), "1h 0m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(90), "1m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(59), "0m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(0), "0m")
+        XCTAssertEqual(PlaybackText.hoursMinutes(.nan), "0m")
     }
 
     func testProgressSpanUsesLessThanOneMinute() {
-        XCTAssertEqual(AppSettings.progressSpan(0), "<1m")
-        XCTAssertEqual(AppSettings.progressSpan(59.9), "<1m")
-        XCTAssertEqual(AppSettings.progressSpan(60), "1m")
-        XCTAssertEqual(AppSettings.progressSpan(3723), "1h 2m")
-        XCTAssertEqual(AppSettings.progressSpan(.nan), "<1m")
-        XCTAssertEqual(AppSettings.progressSpan(-5), "<1m")
+        XCTAssertEqual(PlaybackText.progressSpan(0), "<1m")
+        XCTAssertEqual(PlaybackText.progressSpan(59.9), "<1m")
+        XCTAssertEqual(PlaybackText.progressSpan(60), "1m")
+        XCTAssertEqual(PlaybackText.progressSpan(3723), "1h 2m")
+        XCTAssertEqual(PlaybackText.progressSpan(.nan), "<1m")
+        XCTAssertEqual(PlaybackText.progressSpan(-5), "<1m")
     }
 }
 
@@ -183,8 +183,8 @@ final class FeedServiceTests: XCTestCase {
 final class LibraryDataTests: XCTestCase {
     func testExtraAuthorKeyAndMissingKeysStillDecode() throws {
         let old = """
-        {"podcasts":[{"title":"Show","author":"Ada","artworkURL":"https://example.com/a.png","feedURL":"https://feeds.example.com/show"}],"downloadedEpisodeGUIDs":["ep-1"]}
-        """
+            {"podcasts":[{"title":"Show","author":"Ada","artworkURL":"https://example.com/a.png","feedURL":"https://feeds.example.com/show"}],"downloadedEpisodeGUIDs":["ep-1"]}
+            """
         let library = try JSONDecoder().decode(LibraryData.self, from: Data(old.utf8))
         XCTAssertEqual(library.podcasts.map(\.title), ["Show"])
         XCTAssertEqual(library.podcasts.map(\.feedURL), ["https://feeds.example.com/show"])
@@ -222,14 +222,16 @@ final class LibraryDataTests: XCTestCase {
 
         persistence.update(flushImmediately: true) { library in
             library.podcasts = [
-                Podcast(title: "Recovered", artworkURL: "", feedURL: "https://feeds.example.com/recovered"),
+                Podcast(title: "Recovered", artworkURL: "", feedURL: "https://feeds.example.com/recovered")
             ]
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: libraryURL.path))
         let restored = try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: libraryURL))
         XCTAssertEqual(restored.podcasts.map(\.title), ["Recovered"])
-        let backupsAfterSave = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            .filter { $0.lastPathComponent.hasPrefix("library.json.corrupt-") }
+        let backupsAfterSave = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        )
+        .filter { $0.lastPathComponent.hasPrefix("library.json.corrupt-") }
         XCTAssertEqual(backupsAfterSave.count, 1)
     }
 }
@@ -271,52 +273,52 @@ final class AppSettingsDefaultTests: XCTestCase {
 }
 
 private let sampleFeed = """
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
-<channel>
-<title>Sample Show</title>
-<item>
-<title>Seconds</title>
-<guid>sec-1</guid>
-<pubDate>Wed, 02 Oct 2002 13:00:00 +0000</pubDate>
-<itunes:duration>3661</itunes:duration>
-<enclosure url="https://example.com/a.mp3" type="audio/mpeg"/>
-</item>
-<item>
-<title>Minutes</title>
-<guid>mmss-1</guid>
-<pubDate>not-a-date</pubDate>
-<itunes:duration>45:30</itunes:duration>
-<enclosure url="https://example.com/b.mp3" type="audio/mpeg"/>
-</item>
-<item>
-<title>Hours</title>
-<guid>hh-1</guid>
-<itunes:duration>1:02:03</itunes:duration>
-<enclosure url="https://example.com/c.mp3" type="audio/mpeg"/>
-</item>
-</channel>
-</rss>
-"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+    <channel>
+    <title>Sample Show</title>
+    <item>
+    <title>Seconds</title>
+    <guid>sec-1</guid>
+    <pubDate>Wed, 02 Oct 2002 13:00:00 +0000</pubDate>
+    <itunes:duration>3661</itunes:duration>
+    <enclosure url="https://example.com/a.mp3" type="audio/mpeg"/>
+    </item>
+    <item>
+    <title>Minutes</title>
+    <guid>mmss-1</guid>
+    <pubDate>not-a-date</pubDate>
+    <itunes:duration>45:30</itunes:duration>
+    <enclosure url="https://example.com/b.mp3" type="audio/mpeg"/>
+    </item>
+    <item>
+    <title>Hours</title>
+    <guid>hh-1</guid>
+    <itunes:duration>1:02:03</itunes:duration>
+    <enclosure url="https://example.com/c.mp3" type="audio/mpeg"/>
+    </item>
+    </channel>
+    </rss>
+    """
 
 private let emptyFeed = """
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Empty</title></channel></rss>
-"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Empty</title></channel></rss>
+    """
 
 private let blankTitleFeed = """
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
-<channel>
-<title>   </title>
-<item>
-<title>Episode</title>
-<guid>blank-1</guid>
-<enclosure url="https://example.com/e.mp3" type="audio/mpeg"/>
-</item>
-</channel>
-</rss>
-"""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+    <channel>
+    <title>   </title>
+    <item>
+    <title>Episode</title>
+    <guid>blank-1</guid>
+    <enclosure url="https://example.com/e.mp3" type="audio/mpeg"/>
+    </item>
+    </channel>
+    </rss>
+    """
 
 private func makeEpisode(guid: String, pubDateTimestamp: Double?) -> Episode {
     Episode(
@@ -379,13 +381,13 @@ private final class Server {
         port = UInt16(bigEndian: bound.sin_port)
 
         let header = """
-        HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r
-        Content-Type: application/rss+xml\r
-        Content-Length: \(body.count)\r
-        Connection: close\r
-        \r
+            HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r
+            Content-Type: application/rss+xml\r
+            Content-Length: \(body.count)\r
+            Connection: close\r
+            \r
 
-        """
+            """
         let payload = Data(header.utf8) + body
         let listenFD = fd
         Thread.detachNewThread {

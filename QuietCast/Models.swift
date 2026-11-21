@@ -21,7 +21,7 @@ struct Episode: Codable, Identifiable, Equatable {
     let title: String
     let descriptionText: String
     let pubDate: String
-    /// Parsed publication date as seconds since 1970, or nil if unparseable
+    /// Parsed publication date as seconds since 1970, or nil when the feed date is not valid.
     let pubDateTimestamp: Double?
     let duration: String
     let audioURL: String

@@ -78,16 +78,17 @@ final class RemoteCommandHandler {
     func playRandomOldEpisode() {
         guard !isCrownActionActive else { return }
         isCrownActionActive = true
-        let ageDays = AppSettings.randomEpisodeAgeDays
-        let excludedFeedURLs = Set(AppSettings.randomExcludedFeedURLs)
+        let ageDays = AppSettings.shared.randomEpisodeAgeDays
+        let excludedFeedURLs = Set(AppSettings.shared.randomExcludedFeedURLs)
 
         let persistence = PersistenceManager.shared
         let library = persistence.loadLibrary()
 
         // Get included podcast feed URLs
-        let includedFeedURLs = Set(library.podcasts
-            .map(\.feedURL)
-            .filter { !excludedFeedURLs.contains($0) })
+        let includedFeedURLs = Set(
+            library.podcasts
+                .map(\.feedURL)
+                .filter { !excludedFeedURLs.contains($0) })
 
         // Clean rotation: remove feed URLs no longer in the included set
         var rotation = library.crownPodcastRotation.filter { includedFeedURLs.contains($0) }

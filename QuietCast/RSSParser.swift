@@ -7,13 +7,6 @@ import FoundationXML
 #endif
 #if canImport(os)
 import os
-#else
-private struct Logger {
-    init(subsystem: String, category: String) {}
-    func info(_ message: String) {}
-    func error(_ message: String) {}
-    func warning(_ message: String) {}
-}
 #endif
 
 final class RSSParser: NSObject, XMLParserDelegate {
@@ -62,20 +55,17 @@ final class RSSParser: NSObject, XMLParserDelegate {
         let rawString: String
         if let str = String(data: data, encoding: .utf8) {
             rawString = str
-        } else if let str = String(data: data, encoding: .isoLatin1) {
-            rawString = str
         } else {
-            rawString = String(decoding: data, as: UTF8.self)
+            // ISO Latin-1 accepts every byte, so this is the fallback for non-UTF-8 feeds.
+            rawString = String(data: data, encoding: .isoLatin1) ?? ""
         }
 
         // Strip invalid XML characters (control chars that XMLParser cannot handle).
         // Valid XML 1.0 chars: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
         let cleaned = rawString.unicodeScalars.filter { scalar in
             let v = scalar.value
-            return v == 0x9 || v == 0xA || v == 0xD ||
-                   (v >= 0x20 && v <= 0xD7FF) ||
-                   (v >= 0xE000 && v <= 0xFFFD) ||
-                   (v >= 0x10000 && v <= 0x10FFFF)
+            return v == 0x9 || v == 0xA || v == 0xD || (v >= 0x20 && v <= 0xD7FF) || (v >= 0xE000 && v <= 0xFFFD)
+                || (v >= 0x10000 && v <= 0x10FFFF)
         }
         let cleanedString = String(String.UnicodeScalarView(cleaned))
 
@@ -98,9 +88,11 @@ final class RSSParser: NSObject, XMLParserDelegate {
         return episodes
     }
 
-    func parser(_ parser: XMLParser, didStartElement elementName: String,
-                namespaceURI: String?, qualifiedName qName: String?,
-                attributes attributeDict: [String: String] = [:]) {
+    func parser(
+        _ parser: XMLParser, didStartElement elementName: String,
+        namespaceURI: String?, qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
         currentElement = elementName
 
         if elementName == "item" {
@@ -155,8 +147,10 @@ final class RSSParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, didEndElement elementName: String,
-                namespaceURI: String?, qualifiedName qName: String?) {
+    func parser(
+        _ parser: XMLParser, didEndElement elementName: String,
+        namespaceURI: String?, qualifiedName qName: String?
+    ) {
         if elementName == "item" {
             insideItem = false
 
@@ -219,7 +213,7 @@ struct LoadedFeed {
 
 /// Shared feed download used by add-by-URL and the episode list refresh.
 enum FeedService {
-    static func load(feedURL: String) async throws -> LoadedFeed {
+    static func load(feedURL: String, session: URLSession = .shared) async throws -> LoadedFeed {
         guard let url = URL(string: feedURL), url.scheme != nil else {
             throw FeedError.invalidURL
         }
@@ -232,8 +226,10 @@ enum FeedService {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch let error as URLError where error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError
+            where error.code == .notConnectedToInternet || error.code == .networkConnectionLost
+        {
             throw FeedError.offline
         } catch let error as URLError where error.code == .timedOut {
             throw FeedError.timedOut
@@ -259,7 +255,8 @@ enum FeedService {
 
     /// Channel title, or the feed host, or "Unknown Podcast" when both are blank.
     static func podcastTitle(from episodes: [Episode], feedURL: URL) -> String {
-        let rawTitle = episodes.first?.podcastTitle
+        let rawTitle =
+            episodes.first?.podcastTitle
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if rawTitle.isEmpty {
             return feedURL.host ?? "Unknown Podcast"

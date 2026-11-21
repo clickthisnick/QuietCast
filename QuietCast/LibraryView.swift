@@ -70,9 +70,12 @@ struct LibraryView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSearch, onDismiss: {
-                searchAllowed = TimeGate.searchAllowed()
-            }) {
+            .sheet(
+                isPresented: $showSearch,
+                onDismiss: {
+                    searchAllowed = TimeGate.searchAllowed()
+                }
+            ) {
                 SearchView(podcasts: $podcasts)
             }
             .alert("Add Feed URL", isPresented: $showAddURL) {
@@ -236,8 +239,10 @@ struct LibraryView: View {
         .navigationDestination(item: $selectedPodcast) { podcast in
             EpisodeListView(podcast: podcast)
         }
-        .alert("Delete Podcast?",
-               isPresented: $showDeleteConfirmation) {
+        .alert(
+            "Delete Podcast?",
+            isPresented: $showDeleteConfirmation
+        ) {
             Button("Delete Podcast & Data", role: .destructive) {
                 if let podcast = podcastToDelete {
                     deletePodcast(podcast)
@@ -248,7 +253,9 @@ struct LibraryView: View {
                 podcastToDelete = nil
             }
         } message: {
-            Text("This will remove \"\(podcastToDelete?.title ?? "")\" from your library and delete all its downloaded episodes and data.")
+            Text(
+                "This will remove \"\(podcastToDelete?.title ?? "")\" from your library and delete all its downloaded episodes and data."
+            )
         }
     }
 
@@ -299,11 +306,12 @@ struct LibraryView: View {
                 guard downloadManager.isDownloaded(episode) else { continue }
                 let trimmedTitle = podcast.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 let podcastName = trimmedTitle.isEmpty ? episode.podcastTitle : trimmedTitle
-                items.append(DownloadedEpisode(
-                    episode: episode,
-                    feedURL: podcast.feedURL,
-                    podcastName: podcastName
-                ))
+                items.append(
+                    DownloadedEpisode(
+                        episode: episode,
+                        feedURL: podcast.feedURL,
+                        podcastName: podcastName
+                    ))
             }
         }
         return items
@@ -335,7 +343,7 @@ struct LibraryView: View {
                             Text("·")
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
-                            Text("\(AppSettings.hoursMinutes(saved)) in")
+                            Text("\(PlaybackText.hoursMinutes(saved)) in")
                                 .font(.caption2)
                                 .foregroundStyle(Color.warmAccent)
                         }
@@ -365,7 +373,9 @@ struct LibraryView: View {
 
         // Check if already saved by normalized URL
         let normalized = trimmed.lowercased()
-        if podcasts.contains(where: { $0.feedURL.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) == normalized }) {
+        if podcasts.contains(where: {
+            $0.feedURL.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) == normalized
+        }) {
             addURLError = "This podcast is already in your library."
             showAddURL = true
             return
@@ -513,46 +523,22 @@ private struct DownloadedEpisodeRow: View {
             if duration.isFinite, duration > 0 {
                 let remaining = duration - audioPlayer.currentTime
                 if remaining.isFinite {
-                    return .remaining(Self.formatSpan(max(remaining, 0)))
+                    return .remaining(PlaybackText.progressSpan(max(remaining, 0)))
                 }
             }
         }
 
         let position = PersistenceManager.shared.playbackPosition(for: episode.guid)
         if position.isFinite, position > 0 {
-            if let total = Self.durationSeconds(episode.duration), total > position {
-                return .remaining(Self.formatSpan(total - position))
+            if let total = PlaybackText.durationSeconds(episode.duration), total > position {
+                return .remaining(PlaybackText.progressSpan(total - position))
             }
-            return .elapsed(Self.formatSpan(position))
+            return .elapsed(PlaybackText.progressSpan(position))
         }
         if PersistenceManager.shared.isPlayed(episode.guid) {
             return .played
         }
         return .fresh
-    }
-
-    /// `itunes:duration` is seconds, minutes:seconds, or hours:minutes:seconds.
-    private static func durationSeconds(_ raw: String) -> Double? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let pieces = trimmed.split(separator: ":")
-        if pieces.count == 1 {
-            guard let seconds = Double(trimmed), seconds.isFinite, seconds > 0 else { return nil }
-            return seconds
-        }
-        guard pieces.count == 2 || pieces.count == 3 else { return nil }
-        var total = 0.0
-        for piece in pieces {
-            let part = piece.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let value = Double(part), value.isFinite, value >= 0 else { return nil }
-            total = total * 60 + value
-        }
-        guard total.isFinite, total > 0 else { return nil }
-        return total
-    }
-
-    private static func formatSpan(_ seconds: Double) -> String {
-        AppSettings.progressSpan(seconds)
     }
 }
 

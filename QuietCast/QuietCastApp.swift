@@ -38,9 +38,11 @@ struct QuietCastApp: App {
                 .tint(Color.warmAccent)
         }
         .onChange(of: scenePhase) { _, phase in
-            guard let screen = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first?.screen else { return }
+            guard
+                let screen = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first?.screen
+            else { return }
 
             switch phase {
             case .active:
@@ -64,7 +66,7 @@ struct QuietCastApp: App {
 
                 // Enforce system volume range on app open when the lock is on.
                 // VolumeEnforcer applies the nighttime / always-on check itself.
-                if AppSettings.systemVolumeCapEnabled {
+                if AppSettings.shared.systemVolumeCapEnabled {
                     let enforcer = VolumeEnforcer.shared
                     enforcer.installVolumeView()
                     // Small delay to let the volume view attach

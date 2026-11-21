@@ -1,8 +1,11 @@
 import Foundation
 #if canImport(os)
 import os
-#else
-private struct Logger {
+#endif
+
+#if !canImport(os)
+/// Stand-in for `os.Logger` when the logic library is built on Linux.
+struct Logger {
     init(subsystem: String, category: String) {}
     func info(_ message: String) {}
     func error(_ message: String) {}
@@ -18,16 +21,18 @@ struct LibraryData: Codable {
     var lastPlayedEpisodeGUID: String?
     var lastPlayedFeedURL: String?
     var crownPodcastRotation: [String]
-    var podcastSkipSeconds: [String: Int] // feedURL -> custom skip duration in seconds
+    var podcastSkipSeconds: [String: Int]  // feedURL -> custom skip duration in seconds
 
-    init(podcasts: [Podcast] = [],
-         downloadedEpisodeGUIDs: Set<String> = [],
-         playbackPositions: [String: Double] = [:],
-         playedEpisodeGUIDs: Set<String> = [],
-         lastPlayedEpisodeGUID: String? = nil,
-         lastPlayedFeedURL: String? = nil,
-         crownPodcastRotation: [String] = [],
-         podcastSkipSeconds: [String: Int] = [:]) {
+    init(
+        podcasts: [Podcast] = [],
+        downloadedEpisodeGUIDs: Set<String> = [],
+        playbackPositions: [String: Double] = [:],
+        playedEpisodeGUIDs: Set<String> = [],
+        lastPlayedEpisodeGUID: String? = nil,
+        lastPlayedFeedURL: String? = nil,
+        crownPodcastRotation: [String] = [],
+        podcastSkipSeconds: [String: Int] = [:]
+    ) {
         self.podcasts = podcasts
         self.downloadedEpisodeGUIDs = downloadedEpisodeGUIDs
         self.playbackPositions = playbackPositions
@@ -62,6 +67,9 @@ final class PersistenceManager {
 
     /// Tests point this at a temporary folder. Nil uses the app group container or Documents.
     var storageDirectoryOverride: URL?
+
+    /// Tests set this to false to keep an unreadable library.json in place.
+    var allowsCorruptBackup = true
 
     init() {}
 
@@ -108,6 +116,7 @@ final class PersistenceManager {
 
     /// Move an unreadable library.json to `library.json.corrupt-<date>` so a later save cannot destroy it.
     private func backupCorruptLibrary(at url: URL) -> Bool {
+        guard allowsCorruptBackup else { return false }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -153,7 +162,7 @@ final class PersistenceManager {
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second debounce
+            try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5 second debounce
             guard !Task.isCancelled else { return }
             self.writeToDisk()
         }
@@ -187,7 +196,9 @@ final class PersistenceManager {
         if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID) {
             return groupURL
         }
-        logger.warning("App Group container not available for '\(Self.appGroupID)' — falling back to Documents directory. Data will not persist across reinstalls.")
+        logger.warning(
+            "App Group container not available for '\(Self.appGroupID)' — falling back to Documents directory. Data will not persist across reinstalls."
+        )
         #endif
         return fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
@@ -199,10 +210,7 @@ final class PersistenceManager {
     /// Destination path for a download. Uses only the GUID so a finished
     /// background task can be saved after relaunch, when the Episode is gone.
     func localFileURL(forEpisodeGUID guid: String) -> URL {
-        let safeName = guid
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        return documentsDirectory().appendingPathComponent("download_\(safeName).mp3")
+        storageFile(prefix: "download_", raw: guid, ext: "mp3")
     }
 
     func isDownloaded(_ episode: Episode) -> Bool {
@@ -223,7 +231,9 @@ final class PersistenceManager {
 
     func excludeExistingDownloadsFromBackup() {
         let docs = documentsDirectory()
-        guard let files = try? fileManager.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) else { return }
+        guard let files = try? fileManager.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) else {
+            return
+        }
         for file in files where file.lastPathComponent.hasPrefix("download_") {
             excludeFromBackup(url: file)
         }
@@ -262,19 +272,13 @@ final class PersistenceManager {
 
     // MARK: - Last Played Episode
 
-    func saveLastPlayedEpisode(guid: String, feedURL: String) {
-        update { library in
-            library.lastPlayedEpisodeGUID = guid
-            library.lastPlayedFeedURL = feedURL
-        }
-    }
-
     /// Loads the last played episode from the episode cache, if available.
     func loadLastPlayedEpisode() -> Episode? {
         let library = loadLibrary()
         guard let guid = library.lastPlayedEpisodeGUID,
-              let feedURL = library.lastPlayedFeedURL,
-              let episodes = cachedEpisodes(for: feedURL) else {
+            let feedURL = library.lastPlayedFeedURL,
+            let episodes = cachedEpisodes(for: feedURL)
+        else {
             return nil
         }
         return episodes.first { $0.guid == guid }
@@ -295,16 +299,22 @@ final class PersistenceManager {
     // MARK: - Episode Cache
 
     private func episodeCacheURL(for feedURL: String) -> URL {
-        let safeName = feedURL
+        storageFile(prefix: "cache_", raw: feedURL, ext: "json")
+    }
+
+    private func storageFile(prefix: String, raw: String, ext: String) -> URL {
+        let safe =
+            raw
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
-        return documentsDirectory().appendingPathComponent("cache_\(safeName).json")
+        return documentsDirectory().appendingPathComponent("\(prefix)\(safe).\(ext)")
     }
 
     func cachedEpisodes(for feedURL: String) -> [Episode]? {
         let url = episodeCacheURL(for: feedURL)
         guard let data = try? Data(contentsOf: url),
-              let episodes = try? JSONDecoder().decode([Episode].self, from: data) else {
+            let episodes = try? JSONDecoder().decode([Episode].self, from: data)
+        else {
             return nil
         }
         return episodes
@@ -341,17 +351,18 @@ final class PersistenceManager {
                 library.playedEpisodeGUIDs.remove(guid)
             }
             if library.lastPlayedFeedURL == feedURL
-                || guids.contains(library.lastPlayedEpisodeGUID ?? "") {
+                || guids.contains(library.lastPlayedEpisodeGUID ?? "")
+            {
                 library.lastPlayedEpisodeGUID = nil
                 library.lastPlayedFeedURL = nil
             }
             library.podcastSkipSeconds.removeValue(forKey: feedURL)
         }
 
-        let excluded = AppSettings.randomExcludedFeedURLs
+        let excluded = AppSettings.shared.randomExcludedFeedURLs
         let kept = excluded.filter { $0 != feedURL }
         if kept.count != excluded.count {
-            AppSettings.randomExcludedFeedURLs = kept
+            AppSettings.shared.randomExcludedFeedURLs = kept
         }
     }
 

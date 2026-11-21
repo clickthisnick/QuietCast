@@ -20,8 +20,10 @@ Shared data uses the App Group `group.com.quietcast.shared`, with a fallback to 
 Foundation-only logic is covered by `swift test` from the repository root. `Package.swift` compiles a `QuietCastLogic` library from the existing files in `QuietCast/` (it does not move them) and runs `QuietCastTests/`. Screens, audio, and downloads stay out of that library because they depend on SwiftUI, AVFoundation, UIKit, or MediaPlayer.
 
 ```bash
-swift test
+make check
 ```
+
+`make check` is the command CI runs. It lints Swift, checks spelling and the workflow file, enforces the coverage floor and the shipped-size budget, and runs `swift test`. `AGENTS.md` lists the rules for that check.
 
 There are no CocoaPods, Carthage, or third-party Swift package dependencies.
 
