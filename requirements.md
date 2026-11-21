@@ -38,7 +38,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 | `VolumeEnforcer.swift` | System volume cap/floor enforcement via hidden `MPVolumeView`, KVO observation, rapid polling. `@Observable`, so Settings can show the live system volume. Reads mode-aware cap/floor from `AppSettings`. |
 | `SpeechAnnouncer.swift` | Spoken announcements via `AVSpeechSynthesizer` with best-voice selection. |
 | `RemoteCommandHandler.swift` | `MPRemoteCommandCenter` setup, crown action mutex, random episode and speak-time logic. |
-| `AppSettings.swift` | The only preference store, in `QuietCast/AppSettings.swift`. `@Observable` singleton `AppSettings.shared`, backed by the shared UserDefaults suite. Same keys as before. Views read it directly. |
+| `AppSettings.swift` | The only preference store, in `QuietCast/AppSettings.swift`. `@Observable` singleton `AppSettings.shared`, backed by the shared UserDefaults suite. Same keys as before. Views read it directly. `QuietCastApp` connects playback and volume side effects at launch. |
 | `silence.wav` | 0.1-second silent audio clip used to claim Now Playing session on launch. |
 | `DownloadManager.swift` | Background download management with progress tracking. |
 | `PersistenceManager.swift` | JSON-based persistence for library, episode cache, playback positions, played status, last-played episode, per-podcast skip durations. |

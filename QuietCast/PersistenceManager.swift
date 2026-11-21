@@ -1,5 +1,14 @@
 import Foundation
+#if canImport(os)
 import os
+#else
+private struct Logger {
+    init(subsystem: String, category: String) {}
+    func info(_ message: String) {}
+    func error(_ message: String) {}
+    func warning(_ message: String) {}
+}
+#endif
 
 struct LibraryData: Codable {
     var podcasts: [Podcast]
@@ -50,6 +59,11 @@ final class PersistenceManager {
 
     private let fileManager = FileManager.default
     private let logger = Logger(subsystem: "com.quietcast", category: "PersistenceManager")
+
+    /// Tests point this at a temporary folder. Nil uses the app group container or Documents.
+    var storageDirectoryOverride: URL?
+
+    init() {}
 
     /// In-memory cache — avoids repeated disk reads
     private var cachedLibrary: LibraryData?
@@ -166,10 +180,15 @@ final class PersistenceManager {
     }
 
     func documentsDirectory() -> URL {
+        if let storageDirectoryOverride {
+            return storageDirectoryOverride
+        }
+        #if os(iOS) || os(macOS) || os(tvOS) || os(watchOS) || os(visionOS)
         if let groupURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID) {
             return groupURL
         }
         logger.warning("App Group container not available for '\(Self.appGroupID)' — falling back to Documents directory. Data will not persist across reinstalls.")
+        #endif
         return fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 

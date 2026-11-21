@@ -1,5 +1,20 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
+#if canImport(os)
 import os
+#else
+private struct Logger {
+    init(subsystem: String, category: String) {}
+    func info(_ message: String) {}
+    func error(_ message: String) {}
+    func warning(_ message: String) {}
+}
+#endif
 
 final class RSSParser: NSObject, XMLParserDelegate {
     private var episodes: [Episode] = []
@@ -240,5 +255,15 @@ enum FeedService {
             parseFailed: parser.parseFailed,
             contentType: http.value(forHTTPHeaderField: "Content-Type")
         )
+    }
+
+    /// Channel title, or the feed host, or "Unknown Podcast" when both are blank.
+    static func podcastTitle(from episodes: [Episode], feedURL: URL) -> String {
+        let rawTitle = episodes.first?.podcastTitle
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if rawTitle.isEmpty {
+            return feedURL.host ?? "Unknown Podcast"
+        }
+        return rawTitle
     }
 }
