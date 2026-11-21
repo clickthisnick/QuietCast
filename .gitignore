@@ -28,21 +28,6 @@ playground.xcworkspace
 Packages/
 Package.resolved
 
-# CocoaPods / Carthage
-Pods/
-Carthage/Build/
-
-# Fastlane
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/**/*.png
-fastlane/test_output
-
-# Accio / code injection
-Dependencies/
-.accio/
-iOSInjectionProject/
-
 # Signing secrets — do not commit
 *.mobileprovision
 *.p12

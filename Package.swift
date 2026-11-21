@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.4
 
 import PackageDescription
 
@@ -11,7 +11,7 @@ let package = Package(
         .macOS(.v14),
     ],
     products: [
-        .library(name: "QuietCastLogic", targets: ["QuietCastLogic"]),
+        .library(name: "QuietCastLogic", targets: ["QuietCastLogic"])
     ],
     targets: [
         .target(
@@ -34,19 +34,20 @@ let package = Package(
                 "SettingsView.swift",
                 "SpeechAnnouncer.swift",
                 "VolumeEnforcer.swift",
-                "iTunesSearchService.swift",
                 "silence.wav",
             ],
             sources: [
                 "AppSettings.swift",
                 "HTMLCleaner.swift",
+                "iTunesSearchService.swift",
                 "Models.swift",
                 "PersistenceManager.swift",
+                "PlaybackText.swift",
                 "RSSParser.swift",
                 "TimeGate.swift",
             ],
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v5)
             ]
         ),
         .testTarget(
@@ -54,7 +55,7 @@ let package = Package(
             dependencies: ["QuietCastLogic"],
             path: "QuietCastTests",
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v5)
             ]
         ),
     ]

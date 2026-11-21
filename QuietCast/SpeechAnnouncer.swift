@@ -32,7 +32,7 @@ final class SpeechAnnouncer {
 
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        utterance.volume = min(0.8, AppSettings.maxVolume)
+        utterance.volume = min(0.8, AppSettings.shared.maxVolume)
         if let voice = Self.bestAvailableVoice() {
             utterance.voice = voice
         }

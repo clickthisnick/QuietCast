@@ -14,29 +14,6 @@ final class AppSettings {
     /// Skip forward and back, in seconds. Also the remote-command interval.
     static let skipIntervalSeconds = 30
 
-    /// "1h 23m" or "5m". Truncates seconds. Under a minute is "0m".
-    static func hoursMinutes(_ seconds: Double) -> String {
-        guard seconds.isFinite else { return "0m" }
-        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
-        let total = Int(bounded)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        }
-        return "\(minutes)m"
-    }
-
-    /// Downloaded-row progress. Under a minute is "<1m"; otherwise the same hours-and-minutes text.
-    static func progressSpan(_ seconds: Double) -> String {
-        guard seconds.isFinite else { return "<1m" }
-        let bounded = min(max(seconds, 0.0), Double(Int.max / 4))
-        if bounded < 60 {
-            return "<1m"
-        }
-        return hoursMinutes(bounded)
-    }
-
     private let defaults: UserDefaults
 
     /// Playback and volume reactions. The app installs these at launch. Tests leave them empty.
@@ -75,21 +52,21 @@ final class AppSettings {
 
     init(defaults: UserDefaults) {
         self.defaults = defaults
-        autoPlayNext = Self.storedBool(defaults, Key.autoPlayNext, default: true)
-        maxVolume = Self.storedFloat(defaults, Key.maxVolume, default: 1.0)
-        autoPauseMinutes = Self.storedInt(defaults, Key.autoPauseMinutes, default: 120)
+        autoPlayNext = Self.stored(defaults, Key.autoPlayNext, default: true)
+        maxVolume = Self.stored(defaults, Key.maxVolume, default: 1.0)
+        autoPauseMinutes = Self.stored(defaults, Key.autoPauseMinutes, default: 120)
         noiseCancellationOn = defaults.bool(forKey: Key.noiseCancellationOn)
-        systemVolumeCapNC = Self.storedFloat(defaults, Key.systemVolumeCapNC, default: 0.20)
-        systemVolumeFloorNC = Self.storedFloat(defaults, Key.systemVolumeFloorNC, default: 0.10)
-        systemVolumeCapNoNC = Self.storedFloat(defaults, Key.systemVolumeCapNoNC, default: 0.14)
-        systemVolumeFloorNoNC = Self.storedFloat(defaults, Key.systemVolumeFloorNoNC, default: 0.09)
-        systemVolumeCapEnabled = Self.storedBool(defaults, Key.systemVolumeCapEnabled, default: true)
-        randomEpisodeAgeDays = Self.storedInt(defaults, Key.randomEpisodeAgeDays, default: 60)
+        systemVolumeCapNC = Self.stored(defaults, Key.systemVolumeCapNC, default: 0.20)
+        systemVolumeFloorNC = Self.stored(defaults, Key.systemVolumeFloorNC, default: 0.10)
+        systemVolumeCapNoNC = Self.stored(defaults, Key.systemVolumeCapNoNC, default: 0.14)
+        systemVolumeFloorNoNC = Self.stored(defaults, Key.systemVolumeFloorNoNC, default: 0.09)
+        systemVolumeCapEnabled = Self.stored(defaults, Key.systemVolumeCapEnabled, default: true)
+        randomEpisodeAgeDays = Self.stored(defaults, Key.randomEpisodeAgeDays, default: 60)
         randomExcludedFeedURLs = defaults.stringArray(forKey: Key.randomExcludedFeedURLs) ?? []
-        playbackRate = Self.storedFloat(defaults, Key.playbackRate, default: 1.0)
-        defaultSkipIntroSeconds = Self.storedInt(defaults, Key.defaultSkipIntroSeconds, default: 0)
-        volumeRangeAlwaysOn = Self.storedBool(defaults, Key.volumeRangeAlwaysOn, default: true)
-        volumeRangeAutoReenableMinutes = Self.storedInt(defaults, Key.volumeRangeAutoReenableMinutes, default: 120)
+        playbackRate = Self.stored(defaults, Key.playbackRate, default: 1.0)
+        defaultSkipIntroSeconds = Self.stored(defaults, Key.defaultSkipIntroSeconds, default: 0)
+        volumeRangeAlwaysOn = Self.stored(defaults, Key.volumeRangeAlwaysOn, default: true)
+        volumeRangeAutoReenableMinutes = Self.stored(defaults, Key.volumeRangeAutoReenableMinutes, default: 120)
         volumeRangeReenableAt = defaults.object(forKey: Key.volumeRangeReenableAt) as? Date
         isReady = true
     }
@@ -232,87 +209,10 @@ final class AppSettings {
         didSet { store(randomExcludedFeedURLs, key: Key.randomExcludedFeedURLs) }
     }
 
-    // MARK: - Static access
-
-    static var autoPlayNext: Bool {
-        get { shared.autoPlayNext }
-        set { shared.autoPlayNext = newValue }
-    }
-    static var maxVolume: Float {
-        get { shared.maxVolume }
-        set { shared.maxVolume = newValue }
-    }
-    static var autoPauseMinutes: Int {
-        get { shared.autoPauseMinutes }
-        set { shared.autoPauseMinutes = newValue }
-    }
-    static var playbackRate: Float {
-        get { shared.playbackRate }
-        set { shared.playbackRate = newValue }
-    }
-    static var defaultSkipIntroSeconds: Int {
-        get { shared.defaultSkipIntroSeconds }
-        set { shared.defaultSkipIntroSeconds = newValue }
-    }
-    static var noiseCancellationOn: Bool {
-        get { shared.noiseCancellationOn }
-        set { shared.noiseCancellationOn = newValue }
-    }
-    static var systemVolumeCapNC: Float {
-        get { shared.systemVolumeCapNC }
-        set { shared.systemVolumeCapNC = newValue }
-    }
-    static var systemVolumeFloorNC: Float {
-        get { shared.systemVolumeFloorNC }
-        set { shared.systemVolumeFloorNC = newValue }
-    }
-    static var systemVolumeCapNoNC: Float {
-        get { shared.systemVolumeCapNoNC }
-        set { shared.systemVolumeCapNoNC = newValue }
-    }
-    static var systemVolumeFloorNoNC: Float {
-        get { shared.systemVolumeFloorNoNC }
-        set { shared.systemVolumeFloorNoNC = newValue }
-    }
-    static var systemVolumeCap: Float { shared.systemVolumeCap }
-    static var systemVolumeFloor: Float { shared.systemVolumeFloor }
-    static var systemVolumeCapEnabled: Bool {
-        get { shared.systemVolumeCapEnabled }
-        set { shared.systemVolumeCapEnabled = newValue }
-    }
-    static var volumeRangeAlwaysOn: Bool {
-        get { shared.volumeRangeAlwaysOn }
-        set { shared.volumeRangeAlwaysOn = newValue }
-    }
-    static var volumeRangeAutoReenableMinutes: Int {
-        get { shared.volumeRangeAutoReenableMinutes }
-        set { shared.volumeRangeAutoReenableMinutes = newValue }
-    }
-    static var volumeRangeReenableAt: Date? {
-        get { shared.volumeRangeReenableAt }
-        set { shared.volumeRangeReenableAt = newValue }
-    }
-    static var randomEpisodeAgeDays: Int {
-        get { shared.randomEpisodeAgeDays }
-        set { shared.randomEpisodeAgeDays = newValue }
-    }
-    static var randomExcludedFeedURLs: [String] {
-        get { shared.randomExcludedFeedURLs }
-        set { shared.randomExcludedFeedURLs = newValue }
-    }
-
     // MARK: - Persistence
 
-    private static func storedBool(_ defaults: UserDefaults, _ key: String, default defaultValue: Bool) -> Bool {
-        defaults.object(forKey: key) as? Bool ?? defaultValue
-    }
-
-    private static func storedFloat(_ defaults: UserDefaults, _ key: String, default defaultValue: Float) -> Float {
-        defaults.object(forKey: key) as? Float ?? defaultValue
-    }
-
-    private static func storedInt(_ defaults: UserDefaults, _ key: String, default defaultValue: Int) -> Int {
-        defaults.object(forKey: key) as? Int ?? defaultValue
+    private static func stored<T>(_ defaults: UserDefaults, _ key: String, default defaultValue: T) -> T {
+        defaults.object(forKey: key) as? T ?? defaultValue
     }
 
     @discardableResult

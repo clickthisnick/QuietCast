@@ -18,10 +18,12 @@ struct SettingsView: View {
             List {
                 // Playback
                 Section("Playback") {
-                    Toggle(isOn: Binding(
-                        get: { settings.autoPlayNext },
-                        set: { settings.autoPlayNext = $0 }
-                    )) {
+                    Toggle(
+                        isOn: Binding(
+                            get: { settings.autoPlayNext },
+                            set: { settings.autoPlayNext = $0 }
+                        )
+                    ) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Auto-Play Next Episode")
                                 .font(.subheadline)
@@ -38,7 +40,8 @@ struct SettingsView: View {
                         value: settings.maxVolume,
                         range: 0.1...1.0,
                         step: 0.05,
-                        caption: "Caps in-app volume. Useful for sleep — keeps audio quiet even if your phone volume is high.",
+                        caption:
+                            "Caps in-app volume. Useful for sleep — keeps audio quiet even if your phone volume is high.",
                         set: { settings.maxVolume = $0 }
                     )
                     .padding(.vertical, 4)
@@ -53,9 +56,11 @@ struct SettingsView: View {
                         ) { seconds in
                             settings.defaultSkipIntroSeconds = seconds
                         }
-                        Text("Automatically skip the first seconds of each episode. Override per podcast from the episode list toolbar.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Text(
+                            "Automatically skip the first seconds of each episode. Override per podcast from the episode list toolbar."
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 4)
 
@@ -64,16 +69,20 @@ struct SettingsView: View {
 
                 // System Volume Cap
                 Section("System Volume Cap") {
-                    Toggle(isOn: Binding(
-                        get: { settings.systemVolumeCapEnabled },
-                        set: { settings.systemVolumeCapEnabled = $0 }
-                    )) {
+                    Toggle(
+                        isOn: Binding(
+                            get: { settings.systemVolumeCapEnabled },
+                            set: { settings.systemVolumeCapEnabled = $0 }
+                        )
+                    ) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Lock Volume Range")
                                 .font(.subheadline)
-                            Text("Keeps system volume within a set range during nighttime hours (\(TimeGate.nightHoursText)).")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                            Text(
+                                "Keeps system volume within a set range during nighttime hours (\(TimeGate.nightHoursText))."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                         }
                     }
                     .tint(Color.warmAccent)
@@ -92,23 +101,31 @@ struct SettingsView: View {
                         if !settings.systemVolumeCapEnabled, let reenableAt = settings.volumeRangeReenableAt {
                             TimelineView(.periodic(from: .now, by: 1)) { context in
                                 let remaining = reenableAt.timeIntervalSince(context.date)
-                                Text(remaining > 0 ? "Lock will re-enable in \(AppSettings.hoursMinutes(remaining.rounded()))" : "Lock will re-enable now")
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        } else {
-                            Text("If you turn off Lock Volume Range, it will automatically turn back on after this delay.")
+                                Text(
+                                    remaining > 0
+                                        ? "Lock will re-enable in \(PlaybackText.hoursMinutes(remaining.rounded()))"
+                                        : "Lock will re-enable now"
+                                )
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
+                            }
+                        } else {
+                            Text(
+                                "If you turn off Lock Volume Range, it will automatically turn back on after this delay."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                         }
                     }
                     .padding(.vertical, 4)
 
                     if settings.systemVolumeCapEnabled {
-                        Toggle(isOn: Binding(
-                            get: { settings.volumeRangeAlwaysOn },
-                            set: { settings.volumeRangeAlwaysOn = $0 }
-                        )) {
+                        Toggle(
+                            isOn: Binding(
+                                get: { settings.volumeRangeAlwaysOn },
+                                set: { settings.volumeRangeAlwaysOn = $0 }
+                            )
+                        ) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Always Enforce")
                                     .font(.subheadline)
@@ -155,9 +172,11 @@ struct SettingsView: View {
                                 value: settings.systemVolumeFloorNoNC,
                                 set: { settings.systemVolumeFloorNoNC = $0 }
                             )
-                            Text("Toggle noise cancellation mode from the now playing bar. Volume is enforced \(TimeGate.nightHoursText), or always if enabled above.")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                            Text(
+                                "Toggle noise cancellation mode from the now playing bar. Volume is enforced \(TimeGate.nightHoursText), or always if enabled above."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                         }
                         .padding(.vertical, 4)
                     }
@@ -202,9 +221,11 @@ struct SettingsView: View {
                             step: 7
                         )
                         .tint(Color.warmAccent)
-                        Text("The shuffle button on each podcast will only pick episodes older than this many days. Double-press your headphone crown to play a random episode without unlocking your phone.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        Text(
+                            "The shuffle button on each podcast will only pick episodes older than this many days. Double-press your headphone crown to play a random episode without unlocking your phone."
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                     }
                     .padding(.vertical, 4)
 
@@ -220,8 +241,12 @@ struct SettingsView: View {
                                     togglePodcast(podcast.feedURL)
                                 } label: {
                                     HStack {
-                                        Image(systemName: excludedFeedURLs.contains(podcast.feedURL) ? "circle" : "checkmark.circle.fill")
-                                            .foregroundStyle(excludedFeedURLs.contains(podcast.feedURL) ? .secondary : Color.warmAccent)
+                                        Image(
+                                            systemName: excludedFeedURLs.contains(podcast.feedURL)
+                                                ? "circle" : "checkmark.circle.fill"
+                                        )
+                                        .foregroundStyle(
+                                            excludedFeedURLs.contains(podcast.feedURL) ? .secondary : Color.warmAccent)
                                         Text(podcast.title)
                                             .font(.subheadline)
                                             .foregroundStyle(.primary)
@@ -245,7 +270,8 @@ struct SettingsView: View {
                         infoItem(
                             icon: "clock",
                             title: "Search Hours",
-                            detail: "Podcast search is available \(TimeGate.searchHoursText). You can always listen to saved podcasts and add feeds by URL."
+                            detail:
+                                "Podcast search is available \(TimeGate.searchHoursText). You can always listen to saved podcasts and add feeds by URL."
                         )
                         infoItem(
                             icon: "moon.zzz",
@@ -255,7 +281,8 @@ struct SettingsView: View {
                         infoItem(
                             icon: "timer",
                             title: "Auto-Pause",
-                            detail: "Set in Playback settings to automatically pause after a selected duration — default 2 hours."
+                            detail:
+                                "Set in Playback settings to automatically pause after a selected duration — default 2 hours."
                         )
                         infoItem(
                             icon: "circle.fill",
@@ -270,7 +297,8 @@ struct SettingsView: View {
                         infoItem(
                             icon: "waveform",
                             title: "Voice Quality",
-                            detail: "Spoken announcements use your best installed voice. For a more natural sound, go to Settings > Accessibility > Spoken Content > Voices and download a Premium voice."
+                            detail:
+                                "Spoken announcements use your best installed voice. For a more natural sound, go to Settings > Accessibility > Spoken Content > Voices and download a Premium voice."
                         )
                     }
                     .padding(.top, 8)
@@ -389,9 +417,11 @@ private struct AutoPauseRow: View {
             ) { minutes in
                 settings.autoPauseMinutes = minutes
             }
-            Text("Automatically pauses after the selected duration, even as episodes auto-play overnight. The countdown isn’t reset by new episodes. Unpausing after it fires starts a fresh timer.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Text(
+                "Automatically pauses after the selected duration, even as episodes auto-play overnight. The countdown isn’t reset by new episodes. Unpausing after it fires starts a fresh timer."
+            )
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
     }

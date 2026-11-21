@@ -46,6 +46,7 @@ Every file in this table lives in the `QuietCast/` source directory, including `
 | `iTunesSearchService.swift` | iTunes Search API client. |
 | `HTMLCleaner.swift` | Strips HTML tags, URLs, and entities from episode descriptions. |
 | `Models.swift` | `Podcast` and `Episode` data models. |
+| `PlaybackText.swift` | Duration and playback labels shared by the library and the Now Playing bar. |
 | `TimeGate.swift` | Time-based feature gating (search hours, nighttime detection). |
 | `BuildInfo.swift` | Build timestamp derived from executable modification date. |
 

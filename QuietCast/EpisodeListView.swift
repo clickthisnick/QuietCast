@@ -7,7 +7,6 @@ struct EpisodeListView: View {
     @State private var episodes: [Episode] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var isRefreshing = false
     @State private var skipIntroSeconds: Int?
 
     var body: some View {
@@ -16,13 +15,15 @@ struct EpisodeListView: View {
                 if isLoading && episodes.isEmpty {
                     ProgressView("Loading episodes…")
                 } else if let errorMessage, episodes.isEmpty {
-                    ContentUnavailableView("Failed to Load",
-                                           systemImage: "exclamationmark.triangle",
-                                           description: Text(errorMessage))
+                    ContentUnavailableView(
+                        "Failed to Load",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(errorMessage))
                 } else if episodes.isEmpty {
-                    ContentUnavailableView("No Episodes",
-                                           systemImage: "mic.slash",
-                                           description: Text("This podcast has no episodes."))
+                    ContentUnavailableView(
+                        "No Episodes",
+                        systemImage: "mic.slash",
+                        description: Text("This podcast has no episodes."))
                 } else {
                     episodeList
                 }
@@ -44,7 +45,7 @@ struct EpisodeListView: View {
                             PersistenceManager.shared.setSkipSeconds(nil, for: podcast.feedURL)
                         } label: {
                             HStack {
-                                let d = AppSettings.defaultSkipIntroSeconds
+                                let d = AppSettings.shared.defaultSkipIntroSeconds
                                 Text("Default (\(d == 0 ? "Off" : "\(d)s"))")
                                 if skipIntroSeconds == nil {
                                     Image(systemName: "checkmark")
@@ -114,7 +115,7 @@ struct EpisodeListView: View {
     private func playRandomOldEpisode() {
         // Stop any text-to-speech before starting audio
         SpeechAnnouncer.shared.stop()
-        let eligible = episodes.olderThan(days: AppSettings.randomEpisodeAgeDays)
+        let eligible = episodes.olderThan(days: AppSettings.shared.randomEpisodeAgeDays)
         if let random = eligible.randomElement() {
             audioPlayer.play(episode: random)
         }
@@ -225,7 +226,7 @@ struct EpisodeRow: View {
                     Text("New")
                         .foregroundStyle(Color.warmAccent)
                 case .inProgress(let secs):
-                    Text("\(AppSettings.hoursMinutes(secs)) in")
+                    Text("\(PlaybackText.hoursMinutes(secs)) in")
                         .foregroundStyle(Color.warmAccent)
                 case .played:
                     Text("Played")
@@ -279,10 +280,12 @@ struct EpisodeRow: View {
                 Button {
                     toggleSpeakEpisode()
                 } label: {
-                    Label(isThisEpisodeSpeaking ? "Speaking…" : "Speak",
-                          systemImage: isThisEpisodeSpeaking ? "speaker.wave.3.fill" : "speaker.wave.2")
-                        .font(.caption)
-                        .foregroundStyle(isThisEpisodeSpeaking ? Color.warmAccent : Color.secondary)
+                    Label(
+                        isThisEpisodeSpeaking ? "Speaking…" : "Speak",
+                        systemImage: isThisEpisodeSpeaking ? "speaker.wave.3.fill" : "speaker.wave.2"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(isThisEpisodeSpeaking ? Color.warmAccent : Color.secondary)
                 }
                 .buttonStyle(.borderless)
 
